@@ -122,7 +122,7 @@ export default function AuthForm({ initialMode }: { initialMode: Mode }) {
           mounted ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
         }`}
       >
-        <div className="mb-7">
+        <div className="mb-7 flex justify-center">
           <Image src="/logo1.png" alt="Vouch" width={1580} height={482} className="h-14 w-auto object-contain" priority />
         </div>
 
