@@ -13,9 +13,10 @@ URLs are also gated by Vercel's SSO-based Deployment Protection by default).
 ## Bank connections (Plaid)
 
 The `bank-connection` branch adds Plaid-based bank account linking
-(Plaid Link, transaction sync via webhooks, encrypted access tokens). See
-`docs/PLAID.md` for the full setup, data model, and deployment/subdomain
-instructions.
+(Plaid Link, transaction sync via webhooks, encrypted access tokens),
+multi-tenant via a shared session cookie — no login/signup UI lives here,
+that's owned by the portal. See `docs/PLAID.md` for the full setup, data
+model, multi-tenancy contract, and deployment/subdomain instructions.
 
 ## Tiger CLI
 

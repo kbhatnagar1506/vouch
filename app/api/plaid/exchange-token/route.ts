@@ -4,9 +4,7 @@ import { pool } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto";
 import { getPlaidClient } from "@/lib/plaid";
 import { syncItemTransactions } from "@/lib/plaid-sync";
-
-// TODO: replace with the real authenticated user id once auth is wired in.
-const DEMO_USER_ID = "demo-user";
+import { requireUser, UnauthorizedError } from "@/lib/session";
 
 export async function POST(request: Request) {
   let body: { public_token?: string };
@@ -22,6 +20,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    const user = await requireUser();
     const plaidClient = getPlaidClient();
     const exchange = await plaidClient.itemPublicTokenExchange({ public_token });
     const { access_token: accessToken, item_id: itemId } = exchange.data;
@@ -45,7 +44,7 @@ export async function POST(request: Request) {
          raw = excluded.raw,
          updated_at = now()`,
       [
-        DEMO_USER_ID,
+        user.id,
         itemId,
         encryptSecret(accessToken),
         itemInfo.data.item.institution_id,
@@ -58,6 +57,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, item_id: itemId, initial_sync: result });
   } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to exchange token" },
       { status: 500 },

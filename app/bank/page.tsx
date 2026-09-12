@@ -23,6 +23,7 @@ export default function BankPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
 
   const loadAccounts = useCallback(async () => {
     const res = await fetch("/api/plaid/accounts");
@@ -31,6 +32,9 @@ export default function BankPage() {
   }, []);
 
   useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => setEmail(data.user?.email ?? null));
     fetch("/api/plaid/create-link-token", { method: "POST" })
       .then((res) => res.json())
       .then((data) => {
@@ -42,6 +46,12 @@ export default function BankPage() {
       .catch((err) => setError(String(err)));
     loadAccounts();
   }, [loadAccounts]);
+
+  const onLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    // No login page on this branch — the portal owns sign-in.
+    window.location.href = process.env.NEXT_PUBLIC_PORTAL_LOGIN_URL ?? "https://getvouch.club/login";
+  };
 
   const onSuccess: PlaidLinkOnSuccess = useCallback(
     async (publicToken) => {
@@ -67,7 +77,14 @@ export default function BankPage() {
 
   return (
     <main style={{ maxWidth: 720, margin: "4rem auto", padding: "0 1.5rem" }}>
-      <h1>Bank connections</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <h1>Bank connections</h1>
+        {email && (
+          <p style={{ fontSize: 14 }}>
+            {email} · <button onClick={onLogout}>Log out</button>
+          </p>
+        )}
+      </div>
       <p>
         <button onClick={() => open()} disabled={!ready}>
           Connect a bank account

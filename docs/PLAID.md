@@ -145,13 +145,50 @@ deployment's environment (Preview and/or Production, matching whichever
 you use) — they aren't inherited from the main branch's env if you're using
 a different environment scope.
 
+## Multi-tenancy
+
+Every Plaid route requires a logged-in user and scopes its data by
+`plaid_items.user_id` — no more hardcoded `demo-user`. There is **no
+login/signup UI on this branch**: sign-in is owned by the portal (a sibling
+service on the same parent domain, e.g. `getvouch.club`), built separately.
+This branch only needs to *recognize* a session the portal already created.
+
+**The contract** (defined in `lib/session-token.ts`, must match on both
+sides):
+- A cookie named `session` (see `SESSION_COOKIE`), set with
+  `domain: SESSION_COOKIE_DOMAIN` (e.g. `.getvouch.club`) so it's readable
+  by every subdomain, not just the one that set it.
+- Its value is an HS256 JWT signed with `AUTH_SECRET` — **the same secret
+  value must be set in every service's environment** that needs to share
+  sessions. Payload only needs a `sub` claim: the user's id.
+- That id must exist in a `users` table (or at least match what's stored in
+  `plaid_items.user_id`) reachable from the shared `DATABASE_URL` — this
+  branch's `users` table (`db/migrations/0002_users.sql`) is one candidate;
+  if the portal already has its own users table with different ids, use
+  those ids instead and point `plaid_items.user_id` at them.
+
+This branch ships `app/api/auth/{signup,login,logout,me}` as a working
+reference implementation of that contract (scrypt password hashing, JWT
+sessions) — useful for testing without the portal, and something the
+portal can call directly if convenient, but not required. Whoever owns the
+portal just needs to issue a cookie matching the contract above; the
+mechanism producing it doesn't have to be this code.
+
+**Coordinate before relying on this in production:** the exact cookie
+domain, whether `AUTH_SECRET` is actually shared yet, and which `users`
+table is authoritative are all open questions between services right now —
+confirm with whoever owns the portal rather than assuming these defaults.
+
+**Migrating existing single-tenant data:** `0002_users.sql` creates a
+placeholder `demo-user` account (unusable — its password hash is random)
+so any `plaid_items` row connected before auth existed doesn't get
+orphaned by the new foreign key. Reassign it to a real user with:
+```sql
+update plaid_items set user_id = '<real user id>' where user_id = 'demo-user';
+```
+
 ## Known gaps / before this is truly multi-user production
 
-- **No auth yet.** Every route uses a hardcoded `DEMO_USER_ID = "demo-user"`
-  (see the `TODO` comments in `app/api/plaid/*`). Wire in real
-  authentication and swap that constant for the actual session's user id —
-  it's the only change needed, since the schema already scopes
-  `plaid_items` by `user_id`.
 - **No rate limiting / abuse protection** on the API routes.
 - **No UI for reauthorization** when an item's status becomes
   `reauth_required` (Plaid webhook `PENDING_EXPIRATION` /

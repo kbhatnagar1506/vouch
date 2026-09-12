@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
-
-// TODO: scope by the real authenticated user id once auth is wired in.
-const DEMO_USER_ID = "demo-user";
+import { requireUser, UnauthorizedError } from "@/lib/session";
 
 export async function GET() {
   try {
+    const user = await requireUser();
     const { rows } = await pool.query(
       `select
          a.account_id,
@@ -24,10 +23,13 @@ export async function GET() {
        join plaid_items i on i.item_id = a.item_id
        where i.user_id = $1
        order by a.created_at desc`,
-      [DEMO_USER_ID],
+      [user.id],
     );
     return NextResponse.json({ accounts: rows });
   } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load accounts" },
       { status: 500 },
