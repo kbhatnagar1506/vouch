@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
 import { exchangePublicToken, LINK_TOKEN_STORAGE_KEY } from "@/lib/plaid-client-exchange";
 
@@ -76,53 +77,70 @@ export default function BankPage() {
   });
 
   return (
-    <main style={{ maxWidth: 720, margin: "4rem auto", padding: "0 1.5rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <h1>Bank connections</h1>
-        {email && (
-          <p style={{ fontSize: 14 }}>
-            {email} · <button onClick={onLogout}>Log out</button>
-          </p>
-        )}
-      </div>
-      <p>
-        <button onClick={() => open()} disabled={!ready}>
+    <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50 px-4 py-8">
+      <div className="w-full max-w-[640px] rounded-[20px] border border-slate-100 bg-white p-9 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_rgba(15,23,42,0.08)]">
+        <div className="mb-7 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Image src="/logo1.png" alt="" width={32} height={32} className="h-8 w-8 object-contain" priority />
+            <span className="text-lg font-bold tracking-tight text-slate-900">Vouch</span>
+          </div>
+          {email && (
+            <div className="flex items-center gap-3 text-[13px] text-slate-500">
+              <span>{email}</span>
+              <button onClick={onLogout} className="font-semibold text-blue-600 hover:brightness-110">
+                Log out
+              </button>
+            </div>
+          )}
+        </div>
+
+        <h1 className="mb-1.5 text-2xl font-bold tracking-tight text-slate-900">Bank connections</h1>
+        <p className="mb-6 text-sm text-slate-500">
+          Link a bank account to get started.
+        </p>
+
+        <button
+          onClick={() => open()}
+          disabled={!ready}
+          className="mb-2 w-full rounded-[10px] bg-blue-600 py-3 text-[15px] font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+        >
           Connect a bank account
         </button>
-      </p>
-      {status && <p>{status}</p>}
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
+        {status && <p className="mt-2 text-sm text-slate-600">{status}</p>}
+        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
-      <h2>Connected accounts</h2>
-      {accounts.length === 0 && <p>No accounts connected yet.</p>}
-      {accounts.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: "left" }}>Institution</th>
-              <th style={{ textAlign: "left" }}>Account</th>
-              <th style={{ textAlign: "right" }}>Balance</th>
-              <th style={{ textAlign: "right" }}>Transactions</th>
-            </tr>
-          </thead>
-          <tbody>
+        <h2 className="mt-8 mb-3 text-[13px] font-semibold uppercase tracking-wide text-slate-500">
+          Connected accounts
+        </h2>
+        {accounts.length === 0 && (
+          <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No accounts connected yet.</p>
+        )}
+        {accounts.length > 0 && (
+          <div className="space-y-2">
             {accounts.map((account) => (
-              <tr key={account.account_id}>
-                <td>{account.institution_name}</td>
-                <td>
-                  {account.name} ····{account.mask}
-                </td>
-                <td style={{ textAlign: "right" }}>
-                  {account.current_balance != null
-                    ? `${account.current_balance} ${account.iso_currency_code ?? ""}`
-                    : "—"}
-                </td>
-                <td style={{ textAlign: "right" }}>{account.transaction_count}</td>
-              </tr>
+              <div
+                key={account.account_id}
+                className="flex items-center justify-between rounded-xl bg-slate-50 p-4 text-sm"
+              >
+                <div>
+                  <div className="font-semibold text-slate-900">{account.institution_name}</div>
+                  <div className="text-slate-500">
+                    {account.name} ····{account.mask}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-medium text-slate-900">
+                    {account.current_balance != null
+                      ? `${account.current_balance} ${account.iso_currency_code ?? ""}`
+                      : "—"}
+                  </div>
+                  <div className="text-slate-500">{account.transaction_count} transactions</div>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      )}
-    </main>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
