@@ -10,6 +10,13 @@ production. `DATABASE_URL` is set as a Production env var in the Vercel
 project — add it to Preview too if preview deploys need DB access (preview
 URLs are also gated by Vercel's SSO-based Deployment Protection by default).
 
+## Bank connections (Plaid)
+
+The `bank-connection` branch adds Plaid-based bank account linking
+(Plaid Link, transaction sync via webhooks, encrypted access tokens). See
+`docs/PLAID.md` for the full setup, data model, and deployment/subdomain
+instructions.
+
 ## Tiger CLI
 
 [Tiger CLI](https://github.com/timescale/tiger-cli) is TigerData's command-line
