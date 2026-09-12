@@ -3,8 +3,9 @@ import { redirect } from "next/navigation";
 import pool from "@/lib/db";
 import { verifySession, SESSION_COOKIE_NAME } from "@/lib/auth";
 
-// Where a logged-in, onboarded user goes next — the bank-connection
-// service (a sibling branch/subdomain sharing this session cookie).
+// Where a logged-in user goes next — the bank-connection service (a
+// sibling branch/subdomain sharing this session cookie). Onboarding was
+// removed as an extra step.
 const BANK_CONNECTION_URL = process.env.BANK_CONNECTION_URL ?? "https://bankconnection.getvouch.club/bank";
 
 export default async function LoginExtendPage() {
@@ -19,11 +20,6 @@ export default async function LoginExtendPage() {
   const result = await pool.query("SELECT 1 FROM users WHERE id = $1", [session.userId]);
   if (!result.rowCount) {
     redirect("/login");
-  }
-
-  const profile = await pool.query("SELECT 1 FROM user_profiles WHERE user_id = $1", [session.userId]);
-  if (!profile.rowCount) {
-    redirect("/onboarding");
   }
 
   redirect(BANK_CONNECTION_URL);

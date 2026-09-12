@@ -5,6 +5,11 @@ import Link from "next/link";
 import pool from "@/lib/db";
 import { verifySession, SESSION_COOKIE_NAME } from "@/lib/auth";
 
+// Where a newly signed-up user goes next — the bank-connection service
+// (a sibling branch/subdomain sharing this session cookie). Same
+// destination as login-extend; onboarding was removed as an extra step.
+const BANK_CONNECTION_URL = process.env.BANK_CONNECTION_URL ?? "https://bankconnection.getvouch.club/bank";
+
 export default async function SignupExtendPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
@@ -45,14 +50,14 @@ export default async function SignupExtendPage() {
         <p className="mb-6 text-sm text-slate-500">
           Welcome, {user.name}. Your account for{" "}
           <span className="font-semibold text-slate-700">{user.email}</span> is
-          ready. Let&apos;s set up your profile next.
+          ready. Let&apos;s connect your bank account.
         </p>
 
         <Link
-          href="/onboarding"
+          href={BANK_CONNECTION_URL}
           className="block w-full rounded-[10px] bg-blue-600 py-3 text-center text-[15px] font-bold text-white transition hover:brightness-110"
         >
-          Continue
+          Connect your bank
         </Link>
       </div>
     </div>
