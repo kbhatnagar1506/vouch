@@ -17,8 +17,7 @@ function createPool(): Pool {
 
 // Constructed lazily (not at module load) so importing this file doesn't
 // crash when DATABASE_URL isn't set yet — e.g. during `next build`'s route
-// analysis in an environment (like a fresh Preview deploy) that hasn't had
-// env vars configured for it yet. Reused across hot reloads in dev.
+// analysis. Reused across hot reloads in dev.
 function getPool(): Pool {
   if (!global._pgPool) {
     global._pgPool = createPool();
@@ -26,13 +25,13 @@ function getPool(): Pool {
   return global._pgPool;
 }
 
-// Proxy so existing call sites (`pool.query(...)`) don't need to change —
-// each property access lazily resolves to the real pool, with methods
-// bound to it so `this` inside them is correct.
-export const pool: Pool = new Proxy({} as Pool, {
+// Proxy so existing call sites (`pool.query(...)`) don't need to change.
+const pool: Pool = new Proxy({} as Pool, {
   get(_target, prop, _receiver) {
     const real = getPool();
     const value = Reflect.get(real, prop, real);
     return typeof value === "function" ? value.bind(real) : value;
   },
 });
+
+export default pool;
