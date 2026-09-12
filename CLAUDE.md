@@ -10,6 +10,17 @@ production. `DATABASE_URL` is set as a Production env var in the Vercel
 project — add it to Preview too if preview deploys need DB access (preview
 URLs are also gated by Vercel's SSO-based Deployment Protection by default).
 
+## Voice verification
+
+The `voice-verification` branch adds browser-mic speaker verification (is
+this call the same person who enrolled?) and anti-spoofing (is this a live
+voice, not a clone/replay?) — multi-tenant via the same shared session
+cookie as `bank-connection`, no login/signup UI here either. Model
+inference runs as a separate Python/FastAPI service
+(`services/voice-inference`) deployed to Cloud Run, not Vercel. See
+`docs/VOICE.md` for the full architecture, model choices, data model, and
+deployment/fine-tuning roadmap.
+
 ## Service branches (one repo, one DB, per-service subdomain)
 
 This is a single portal built by one person, with each onboarding step
