@@ -10,6 +10,41 @@ production. `DATABASE_URL` is set as a Production env var in the Vercel
 project — add it to Preview too if preview deploys need DB access (preview
 URLs are also gated by Vercel's SSO-based Deployment Protection by default).
 
+## Service branches (one repo, one DB, per-service subdomain)
+
+This is a single portal built by one person, with each onboarding step
+(Gmail, voice agents, bank connection, temporary card generator, …) as its
+own service. Convention, established with `bank-connection`:
+
+- **One repo, one shared Tiger DB.** Every service branch reads the same
+  `DATABASE_URL` and shares `lib/db.ts`. Don't fork the DB connection setup
+  per service — extend the shared schema/migrations instead (see
+  `db/migrations/`).
+- **One long-lived branch per service**, forked from this branch
+  (`claude/vigilant-meitner-fxqi9c`), e.g. `bank-connection`. Not a
+  short-lived feature branch meant to merge immediately — it stays deployed
+  independently until the service is ready to fold into production.
+- **One subdomain per branch**, bound via Vercel's Git Branch Domains
+  (Project Settings → Domains → attach a domain to a specific branch, or
+  `PATCH /v9/projects/:id/domains/:domain` with `{"gitBranch": "<branch>"}`
+  — see `docs/PLAID.md` for the worked example with
+  `bankconnection.getvouch.club`). Each branch's push auto-deploys to its
+  own subdomain via the existing GitHub → Vercel connection; no new Vercel
+  project needed.
+- **Env vars are per-environment, not inherited.** A new service branch
+  deploys to Vercel's *Preview* environment (only the branch in
+  `productionBranch` deploys to *Production*), so `DATABASE_URL` and any
+  service-specific secrets (e.g. `PLAID_*`) need to be added to Preview
+  explicitly — see `vercel env add <NAME> preview`.
+- Preview deployments (including custom domains on non-production
+  branches) sit behind Vercel's SSO-based Deployment Protection by
+  default — fine for you to browse, but it blocks third-party callbacks
+  (webhooks) unless bypassed. Decide this per-service; it's a
+  security-relevant setting, not a default to flip silently.
+- When a service is ready for real users, merge its branch into
+  `claude/vigilant-meitner-fxqi9c` (or promote it directly) rather than
+  rebuilding it on the production branch.
+
 ## Tiger CLI
 
 [Tiger CLI](https://github.com/timescale/tiger-cli) is TigerData's command-line
