@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:migrate": "node scripts/migrate.mjs"
+    "db:migrate": "node --env-file=.env scripts/migrate.mjs"
   },
   "dependencies": {
     "next": "15.5.25",
