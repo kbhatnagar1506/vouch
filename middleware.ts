@@ -21,9 +21,9 @@ export async function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const userId = token ? await verifySessionToken(token) : null;
+  const session = token ? await verifySessionToken(token) : null;
 
-  if (!userId) {
+  if (!session) {
     if (isProtectedApi) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
@@ -35,11 +35,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Downstream route handlers read the user id via getCurrentUser()
+  // Downstream route handlers read the user via getCurrentUser()
   // (lib/session.ts), which re-verifies the cookie itself — this header
   // is only a fast-path hint, not trusted on its own.
   const response = NextResponse.next();
-  response.headers.set("x-user-id", userId);
+  response.headers.set("x-user-id", session.userId);
   return response;
 }
 

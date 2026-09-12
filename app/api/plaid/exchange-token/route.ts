@@ -55,6 +55,19 @@ export async function POST(request: Request) {
 
     const result = await syncItemTransactions(itemId);
 
+    // Best-effort: only flips the flag if the user already has a
+    // user_profiles row (i.e. completed the portal's onboarding form).
+    // We don't fabricate a row here — onboarding owns those required
+    // fields (address, income range, etc.), this just updates one flag
+    // on top of it once it exists.
+    await pool
+      .query("update user_profiles set bank_connected = true where user_id = $1", [user.id])
+      .catch(() => {
+        // user_profiles may not exist yet if the portal's migration
+        // hasn't been run against this DB — don't fail the bank
+        // connection over it.
+      });
+
     return NextResponse.json({ ok: true, item_id: itemId, initial_sync: result });
   } catch (error) {
     if (error instanceof UnauthorizedError) {

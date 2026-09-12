@@ -5,9 +5,9 @@ import { SESSION_COOKIE, verifySessionToken, getUserById, type User } from "@/li
 export async function getCurrentUser(): Promise<User | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  const userId = await verifySessionToken(token);
-  if (!userId) return null;
-  return getUserById(userId);
+  const session = await verifySessionToken(token);
+  if (!session) return null;
+  return getUserById(session.userId);
 }
 
 /** Same as getCurrentUser, but 401s instead of returning null — for API routes that require auth. */
