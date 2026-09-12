@@ -31,11 +31,8 @@ export default async function SignupExtendPage() {
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-50 px-4 py-8">
       <div className="w-full max-w-[400px] rounded-[20px] border border-slate-100 bg-white p-9 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_rgba(15,23,42,0.08)]">
-        <div className="mb-7 flex items-center gap-2">
-          <Image src="/logo1.png" alt="" width={32} height={32} className="h-8 w-8 object-contain" priority />
-          <span className="text-lg font-bold tracking-tight text-slate-900">
-            Vouch
-          </span>
+        <div className="mb-7">
+          <Image src="/logo1.png" alt="Vouch" width={1580} height={482} className="h-7 w-auto object-contain" priority />
         </div>
 
         <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">

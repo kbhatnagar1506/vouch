@@ -122,11 +122,8 @@ export default function AuthForm({ initialMode }: { initialMode: Mode }) {
           mounted ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
         }`}
       >
-        <div className="mb-7 flex items-center gap-2">
-          <Image src="/logo1.png" alt="" width={32} height={32} className="h-8 w-8 object-contain" priority />
-          <span className="text-lg font-bold tracking-tight text-slate-900">
-            Vouch
-          </span>
+        <div className="mb-7">
+          <Image src="/logo1.png" alt="Vouch" width={1580} height={482} className="h-7 w-auto object-contain" priority />
         </div>
 
         <div className="relative mb-6 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
