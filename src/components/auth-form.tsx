@@ -123,7 +123,7 @@ export default function AuthForm({ initialMode }: { initialMode: Mode }) {
         }`}
       >
         <div className="mb-7">
-          <Image src="/logo1.png" alt="Vouch" width={1580} height={482} className="h-7 w-auto object-contain" priority />
+          <Image src="/logo1.png" alt="Vouch" width={1580} height={482} className="h-14 w-auto object-contain" priority />
         </div>
 
         <div className="relative mb-6 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
