@@ -30,7 +30,7 @@ export async function middleware(request: NextRequest) {
     // No login UI lives on this branch — the portal (a sibling service on
     // the same parent domain) owns sign-in. PORTAL_LOGIN_URL points there;
     // see docs/PLAID.md "Multi-tenancy" for the shared-session contract.
-    const loginUrl = new URL(process.env.PORTAL_LOGIN_URL ?? "https://getvouch.club/login");
+    const loginUrl = new URL(process.env.PORTAL_LOGIN_URL ?? "https://login.getvouch.club/login");
     loginUrl.searchParams.set("next", request.url);
     return NextResponse.redirect(loginUrl);
   }

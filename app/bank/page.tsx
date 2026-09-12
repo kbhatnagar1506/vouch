@@ -50,7 +50,7 @@ export default function BankPage() {
   const onLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     // No login page on this branch — the portal owns sign-in.
-    window.location.href = process.env.NEXT_PUBLIC_PORTAL_LOGIN_URL ?? "https://getvouch.club/login";
+    window.location.href = process.env.NEXT_PUBLIC_PORTAL_LOGIN_URL ?? "https://login.getvouch.club/login";
   };
 
   const onSuccess: PlaidLinkOnSuccess = useCallback(
