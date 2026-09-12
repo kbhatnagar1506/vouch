@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
+import { exchangePublicToken, LINK_TOKEN_STORAGE_KEY } from "@/lib/plaid-client-exchange";
 
 interface Account {
   account_id: string;
@@ -32,26 +33,24 @@ export default function BankPage() {
   useEffect(() => {
     fetch("/api/plaid/create-link-token", { method: "POST" })
       .then((res) => res.json())
-      .then((data) => setLinkToken(data.link_token))
+      .then((data) => {
+        setLinkToken(data.link_token);
+        // Needed so /bank/oauth-return can resume this same Link session
+        // after an OAuth institution redirects the user away and back.
+        window.localStorage.setItem(LINK_TOKEN_STORAGE_KEY, data.link_token);
+      })
       .catch((err) => setError(String(err)));
     loadAccounts();
   }, [loadAccounts]);
 
   const onSuccess: PlaidLinkOnSuccess = useCallback(
     async (publicToken) => {
+      if (!publicToken) return;
       setStatus("Connecting…");
       setError(null);
       try {
-        const res = await fetch("/api/plaid/exchange-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ public_token: publicToken }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to connect account");
-        setStatus(
-          `Connected. Synced ${data.initial_sync.added} transactions.`,
-        );
+        const { added } = await exchangePublicToken(publicToken);
+        setStatus(`Connected. Synced ${added} transactions.`);
         await loadAccounts();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));

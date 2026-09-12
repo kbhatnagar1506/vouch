@@ -74,6 +74,7 @@ or `vercel env add <NAME> production`):
 | `PLAID_SECRET` | from the Plaid dashboard (matches `PLAID_ENV`) |
 | `PLAID_ENV` | `sandbox`, `development`, or `production` |
 | `PLAID_WEBHOOK_URL` | `https://<your-domain>/api/plaid/webhook` |
+| `PLAID_REDIRECT_URI` | `https://<your-domain>/bank/oauth-return` (OAuth institutions only — see below) |
 | `ENCRYPTION_KEY` | 32 random bytes, base64: `openssl rand -base64 32` |
 | `DATABASE_URL` | already set for the rest of the app |
 
@@ -91,14 +92,28 @@ npm run db:migrate
 This applies `db/migrations/0001_plaid_schema.sql` (tracked in a
 `_migrations` table, safe to re-run).
 
-### 4. Register the webhook URL
+### 4. Register the OAuth redirect URI (if you'll support OAuth institutions)
+
+Some institutions require a full-page redirect instead of an embedded login
+(most US banks don't, but it's worth setting up once). `app/bank/oauth-return`
+is that landing page — it resumes the same Link session
+(`receivedRedirectUri`) and finishes the connection the same way as a normal
+in-page success.
+
+Add the exact URL to **Plaid dashboard → Developers → API → Allowed redirect
+URIs**, and set `PLAID_REDIRECT_URI` to the same value. They must match
+exactly (Plaid does support a `*` wildcard for subdomains, e.g.
+`https://*.example.com/bank/oauth-return`, if you're deploying multiple
+preview subdomains and don't want to re-register each one).
+
+### 5. Register the webhook URL
 
 In the Plaid dashboard, set your webhook URL to
 `https://<your-domain>/api/plaid/webhook` (also passed at link-token
 creation via `PLAID_WEBHOOK_URL`, which is belt-and-suspenders — Plaid uses
 whichever was set most recently for the Item).
 
-### 5. Assigning your subdomain
+### 6. Assigning your subdomain
 
 Once this branch is deployed on Vercel (it auto-deploys on push, same as
 the main branch — see below), add your subdomain as a **Domain** on the
