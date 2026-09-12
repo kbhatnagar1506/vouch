@@ -2,6 +2,14 @@
 
 Guidance for Claude Code when working in this repository.
 
+## Deployment
+
+Deployed on Vercel (`acme-1b76/vouch`), connected to this GitHub repo. Pushes
+to `claude/vigilant-meitner-fxqi9c` (the production branch) auto-deploy to
+production. `DATABASE_URL` is set as a Production env var in the Vercel
+project — add it to Preview too if preview deploys need DB access (preview
+URLs are also gated by Vercel's SSO-based Deployment Protection by default).
+
 ## Tiger CLI
 
 [Tiger CLI](https://github.com/timescale/tiger-cli) is TigerData's command-line
