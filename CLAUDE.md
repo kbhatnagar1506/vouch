@@ -35,10 +35,26 @@ Pick the method for your platform:
   sudo yum install tiger-cli
   ```
 
+### Building from source (network-restricted environments)
+
+Some sandboxed/CI environments block `cli.tigerdata.com` and
+`packagecloud.io` at the egress proxy. `github.com` (via `git clone`) and
+`proxy.golang.org` (the Go module proxy) are typically still reachable, so
+building from source works as a fallback:
+
+```sh
+git clone --depth 1 https://github.com/timescale/tiger-cli.git
+cd tiger-cli
+CGO_ENABLED=0 go build -o /usr/local/bin/tiger ./cmd/tiger
+```
+
+Requires a Go toolchain matching (or newer than) the `go` directive in
+`go.mod`; `GOTOOLCHAIN=auto` (the default) will fetch a matching toolchain
+via `proxy.golang.org` automatically. The resulting binary reports its
+version as `dev` since it isn't built with the project's release ldflags.
+
 ### Notes
 
-- Some sandboxed/CI environments restrict outbound network access and may
-  block `cli.tigerdata.com` or `packagecloud.io`; if the install command
-  fails with a network/policy error, install the CLI on an unrestricted
-  machine or request the host be allowlisted.
-- Verify the install with `tiger --version`.
+- If the install command fails with a network/policy error, either build
+  from source (above) or request the relevant host be allowlisted.
+- Verify the install with `tiger version`.
