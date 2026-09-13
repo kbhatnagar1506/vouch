@@ -10,6 +10,16 @@ production. `DATABASE_URL` is set as a Production env var in the Vercel
 project — add it to Preview too if preview deploys need DB access (preview
 URLs are also gated by Vercel's SSO-based Deployment Protection by default).
 
+## Dashboard
+
+The `dashboard` branch ports `kbhatnagar1506/vouch-ui` (a HackRice 16
+hackathon build) into two routes: `/dashboard` (real data — subscriptions
+derived from Gmail, real issued cards, real Plaid budget, rule-based
+renew/hold/ask decisions, no fabricated usage numbers) and `/demo` (public,
+unauthenticated, vouch-ui's original mock data verbatim — mirrors this
+repo's `/voice` vs `/voice/register` split). See `docs/DASHBOARD.md` for
+the full real-vs-stubbed mapping, data sources, and deployment instructions.
+
 ## Service branches (one repo, one DB, per-service subdomain)
 
 This is a single portal built by one person, with each onboarding step
