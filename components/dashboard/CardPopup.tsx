@@ -1,6 +1,7 @@
-import { X, Mic, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Check, Ban } from "lucide-react";
+import { X, Mic, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Check, Ban, Brain } from "lucide-react";
 import Logo from "./Logo";
 import type { AnalyzedSubscription } from "@/lib/dashboard-types";
+import { formatMemoryTimestamp } from "@/lib/memory-schema";
 
 const verdictLabel: Record<string, string> = { renew: "Renew", hold: "Hold", cancel: "Cancel", ask: "Your call" };
 
@@ -125,6 +126,33 @@ export default function CardPopup({
                 <span className="v">{sub.renewsIn === null ? "unknown" : `${sub.renewsIn} day${sub.renewsIn === 1 ? "" : "s"}`}</span>
               </div>
             </div>
+
+            {sub.memories && sub.memories.length > 0 && (
+              <div className="popup-memories">
+                <div className="popup-memories-head">
+                  <Brain size={13} />
+                  <span>What Vouch remembers · {sub.memories.length} from Backboard</span>
+                </div>
+                {/* Raw retrieved memories, verbatim and in Backboard's own
+                    relevance order — nothing here is summarized or rewritten. */}
+                <ul className="memory-list">
+                  {sub.memories.map((memory) => (
+                    <li key={memory.id} className="memory-item">
+                      <p className="memory-content">{memory.content}</p>
+                      <div className="memory-meta">
+                        {memory.score !== null && <span className="memory-score">{memory.score.toFixed(2)} match</span>}
+                        {memory.createdAt && <span>{formatMemoryTimestamp(memory.createdAt)}</span>}
+                        {Object.entries(memory.metadata).map(([key, value]) => (
+                          <span key={key} className="memory-tag">
+                            {key}: {value}
+                          </span>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {mode === "real" && needsPhone && (
               <div className="popup-phone">

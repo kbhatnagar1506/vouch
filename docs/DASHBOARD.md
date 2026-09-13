@@ -69,6 +69,35 @@ first-ever mint still needs a phone number (Stripe requirement for 3D
 Secure); the popup collects it inline, same UX as card-issuing's card
 manager.
 
+## Memories (raw Backboard top-k, per subscription)
+
+Each subscription's decision popup shows the top-k Backboard memories for
+that merchant, under the evidence panel. The write side is on the
+`gmail-connector` branch — `lib/gmail-sync.ts` pushes every classified
+receipt/renewal email into the user's own Backboard assistant. This branch
+only reads: it looks up `backboard_assistants.assistant_id` and runs
+`POST /assistants/{id}/memories/search` with the merchant name as the
+query (`lib/backboard-memories.ts`, k = 5).
+
+**They're shown verbatim.** No model sees them, nothing is summarized,
+re-ranked, filtered by score, or rewritten — the memory text renders
+exactly as Backboard stored it, in Backboard's own relevance order, with
+its score/timestamp/metadata beside it. That's the same rule the rest of
+`/dashboard` follows: show what's in the data, never generate a
+plausible-looking version of it. The one transformation is flattening
+metadata values to strings so JSX can render them, which is why
+`lib/memory-schema.ts` (pure, no DB or network) holds the shaping logic and
+`lib/__tests__/memory-schema.test.ts` tests it — including that a float
+stored as a string by gmail-connector's Backboard-500 workaround stays a
+string rather than being silently re-parsed.
+
+Every failure mode degrades to "no memories shown" rather than failing the
+page: no `BACKBOARD_API_KEY`, no Gmail connection (so no assistant row), a
+Backboard outage, or a response whose shape changed. The demo dashboard
+has no memory store and never shows this panel.
+
+Run the tests with `npm test`.
+
 ## Call me (proxies to the `calling-agent` branch)
 
 The Sidebar's "Call me" button places a real outbound call that reads out

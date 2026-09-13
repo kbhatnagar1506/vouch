@@ -8,6 +8,7 @@
 import { pool } from "@/lib/db";
 import { brandFor, categoryFor, colorForCategory } from "@/lib/catalog";
 import { analyzeReal } from "@/lib/analyze-real";
+import { memoriesForSubscriptions } from "@/lib/backboard-memories";
 import type { User } from "@/lib/auth";
 import type {
   AnalyzedSubscription,
@@ -221,6 +222,15 @@ export async function getRealDashboardData(user: User): Promise<DashboardData> {
     });
   }
   subscriptions.sort((a, b) => (a.renewsIn ?? 999) - (b.renewsIn ?? 999));
+
+  // Attach each merchant's top-k Backboard memories, shown verbatim in the
+  // decision popup as supporting evidence. Never throws and never blocks the
+  // page — a user with no Gmail/Backboard connection just gets none.
+  const memoriesBySub = await memoriesForSubscriptions(user.id, subscriptions);
+  for (const sub of subscriptions) {
+    const memories = memoriesBySub[sub.id];
+    if (memories?.length) sub.memories = memories;
+  }
 
   // ---- Budget: bucket the last 6 months of classified spend by month + category ----
   const monthKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}`;

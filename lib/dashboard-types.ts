@@ -9,6 +9,10 @@
 // integration for any real service, so real data leaves them undefined
 // rather than inventing a plausible-looking number. See docs/DASHBOARD.md.
 
+import type { RetrievedMemory } from "@/lib/memory-schema";
+
+export type { RetrievedMemory };
+
 export type SubStatus = "renew" | "hold" | "ask" | "cancel";
 export type Tone = "renew" | "hold" | "cancel";
 export type Verdict = "Keep" | "Cancel" | "Review";
@@ -34,6 +38,12 @@ export interface Subscription {
   /** Percent change vs the previous charge for this merchant. */
   priceChange?: number;
   overlap?: string | null;
+  /**
+   * Top-k Backboard memories for this merchant, in Backboard's own relevance
+   * order, shown verbatim (see lib/backboard-memories.ts). Real dashboard
+   * only — the demo has no memory store to read from.
+   */
+  memories?: RetrievedMemory[];
 }
 
 export interface Factor {

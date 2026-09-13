@@ -399,6 +399,22 @@ a { color: inherit; text-decoration: none; }
 .evidence-row .v { font-weight: 600; }
 .evidence-row .v.up { color: var(--renew); }
 .evidence-row .v.down { color: var(--cancel); }
+/* Raw Backboard memories, shown verbatim under the evidence panel. Capped
+   height with its own scroll so a long memory can't push the mint/cancel
+   buttons off-screen. */
+.popup-memories { margin-bottom: 18px; }
+.popup-memories-head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 9px;
+}
+.memory-list { list-style: none; margin: 0; padding: 0; max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.memory-item { background: var(--surface-sunk); border-radius: var(--radius); padding: 11px 13px; }
+.memory-content { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memory-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 10.5px; color: var(--ink-3); }
+.memory-tag, .memory-score { background: var(--line); border-radius: 5px; padding: 2px 6px; overflow-wrap: anywhere; }
+.memory-score { color: var(--ink-2); font-weight: 600; }
+
 .popup-actions { display: flex; gap: 10px; }
 .popup-actions .btn { flex: 1; justify-content: center; }
 .voice-hint {
