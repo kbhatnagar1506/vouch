@@ -6,19 +6,26 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:migrate": "node --env-file=.env scripts/migrate.mjs",
+    "calling-agent:sync-assistant": "node --env-file=.env --import tsx scripts/calling-agent/sync-assistant.ts"
   },
   "dependencies": {
     "next": "15.5.25",
     "react": "19.1.1",
     "react-dom": "19.1.1",
-    "pg": "8.13.1"
+    "pg": "8.13.1",
+    "@vapi-ai/server-sdk": "2.0.1",
+    "jose": "6.2.12"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "tailwindcss": "4.3.3",
     "@types/node": "22.10.5",
     "@types/pg": "8.11.10",
     "@types/react": "19.1.9",
     "@types/react-dom": "19.1.7",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "tsx": "4.23.13"
   }
 }

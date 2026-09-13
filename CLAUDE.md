@@ -45,6 +45,17 @@ own service. Convention, established with `bank-connection`:
   `claude/vigilant-meitner-fxqi9c` (or promote it directly) rather than
   rebuilding it on the production branch.
 
+## Calling agent (Vapi + ElevenLabs + Gemini)
+
+The `calling-agent` branch places outbound voice calls on Vouch's behalf
+(collecting/confirming onboarding details) using Vapi for call
+orchestration/telephony, ElevenLabs for the voice, and Gemini (by default —
+any Vapi-supported model works) for the assistant's reasoning. The
+assistant itself is managed as code (`lib/calling-agent/assistant.ts`,
+pushed to Vapi via `npm run calling-agent:sync-assistant`), not built in
+Vapi's dashboard. See `docs/CALLING_AGENT.md` for the full setup and
+architecture.
+
 ## Tiger CLI
 
 [Tiger CLI](https://github.com/timescale/tiger-cli) is TigerData's command-line
