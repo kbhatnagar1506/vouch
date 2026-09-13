@@ -41,15 +41,20 @@ Browser mic  ──▶  /api/voice/enroll|verify  ──▶  voice-inference (Cl
   `bank-connection` gives Plaid access tokens — see `lib/crypto.ts`);
   verification compares a new clip's embedding to it by cosine similarity
   against `VOICE_MATCH_THRESHOLD` (default `0.75`).
-- **Anti-spoofing**: intended to be [AASIST](https://github.com/clovaai/aasist)
-  pretrained on ASVspoof2019 LA, detecting synthetic/cloned or replayed
-  audio. **Not wired up yet** — `services/voice-inference/app/models.py`
-  defines a pluggable `SpoofDetector` interface, but no checkpoint or model
-  architecture is bundled in this repo. Until a real checkpoint is
-  integrated, `/spoof-check` honestly reports `model_loaded: false` rather
-  than fabricating a score, and the enroll/verify routes treat that as "spoof
-  check skipped", not "not spoofed" — don't rely on anti-spoofing being
-  enforced until this is finished.
+- **Anti-spoofing**: [AASIST](https://github.com/clovaai/aasist), a graph
+  attention network pretrained on ASVspoof2019 LA to flag synthetic,
+  voice-converted, or replayed audio. Vendored unmodified (MIT license —
+  `app/aasist_model.py`, `THIRD_PARTY_LICENSES/aasist-LICENSE`) along with
+  its pretrained checkpoint (`app/weights/aasist.pth`, ships in that same
+  repo, no separate download needed), both baked into the Docker image.
+  `SpoofDetector` (`app/models.py`) loads it eagerly at startup; `/spoof-check`
+  reports `model_loaded: false` only if that checkpoint file is ever
+  missing (e.g. a stripped-down build) — the enroll/verify routes treat
+  that as "spoof check skipped", never as "not spoofed". This is still a
+  frozen pretrained checkpoint, not fine-tuned on Vouch's own data or
+  audio pipeline (browser MediaRecorder webm/opus, not ASVspoof's studio
+  flac) — treat its scores as a real but unvalidated-on-our-traffic signal
+  until tested against actual enrollment/verification recordings.
 
 ### Why frozen pretrained models instead of training our own
 
@@ -62,16 +67,16 @@ accurate MVP live now, with no dataset or training cost. Fine-tuning on
 top of that (e.g. once real usage data + dataset access exists) is a
 later, separate project — see "Fine-tuning roadmap" below.
 
-### Anti-spoofing — how to finish it
+### Anti-spoofing — what's left
 
-1. Get a pretrained AASIST checkpoint (e.g. from the
-   [clovaai/aasist](https://github.com/clovaai/aasist) releases).
-2. Port its model architecture into
-   `services/voice-inference/app/models.py` (replace the
-   `NotImplementedError` in `SpoofDetector.load()`), matching the
-   checkpoint's `state_dict` keys.
-3. Bake the checkpoint into the Cloud Run image (or mount it from GCS at
-   startup) and set `AASIST_CHECKPOINT_PATH` to its path.
+The pretrained checkpoint is wired up and running, but hasn't been
+validated against real Vouch audio (only a synthetic test tone so far —
+enough to prove the pipeline doesn't crash, not that `SPOOF_THRESHOLD`
+(default `0.5`) is the right cutoff for real voices captured through a
+browser mic). Calibrate it against real enroll/verify recordings — bonafide
+first, then an actual spoof attempt (e.g. a recording of the enrollment
+phrase played back, or a cloned sample) — before relying on it to actually
+block anything.
 
 ## Data model
 
