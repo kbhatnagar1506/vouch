@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:migrate": "node --env-file=.env scripts/migrate.mjs"
+    "db:migrate": "node --env-file=.env scripts/migrate.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "next": "15.5.25",
@@ -15,7 +17,8 @@
     "react-dom": "19.1.1",
     "pg": "8.13.1",
     "jose": "6.2.12",
-    "googleapis": "144.0.0"
+    "googleapis": "144.0.0",
+    "google-auth-library": "^11.0.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
@@ -24,6 +27,14 @@
     "@types/pg": "8.11.10",
     "@types/react": "19.1.9",
     "@types/react-dom": "19.1.7",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "jsdom": "^29.1.1",
+    "vite": "^5.4.21",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^2.1.9"
   }
 }

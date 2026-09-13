@@ -15,11 +15,15 @@ URLs are also gated by Vercel's SSO-based Deployment Protection by default).
 The `gmail-connector` branch adds read-only Gmail OAuth as an onboarding
 step (signup/login → Gmail → bank → voice registration) — multi-tenant via
 the same shared session cookie as every other service, no login/signup UI
-here either. Adapted from `aaditisinghal/vouch-aaditi`'s
-`feature/gmail-connector` branch, which she removed before merging her
-login/signup work into `portal` — ported here rather than losing it. See
-`docs/GMAIL.md` for the full setup, what was adapted vs. kept as-is, and
-deployment/subdomain instructions.
+here either. Once connected, it also imports financially-relevant messages
+into a classified, embedded, searchable pipeline backed by a standalone
+bitemporal memory subsystem (pgvector + full-text hybrid search, RLS tenant
+isolation) and an optional mirror into Backboard.io's persistent memory API.
+Adapted from `aaditisinghal/vouch-aaditi`'s `feature/gmail-connector`
+branch — ported here rather than losing it as her branch evolved. See
+`docs/GMAIL.md` for the full setup, what was adapted vs. kept as-is,
+deployment/subdomain instructions, and how the pipeline/memory/Backboard
+pieces fit together.
 
 ## Service branches (one repo, one DB, per-service subdomain)
 

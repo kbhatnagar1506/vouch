@@ -5,6 +5,8 @@ import { pool } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { createOAuthClient, GMAIL_OAUTH_STATE_COOKIE } from "@/lib/google";
 import { encryptSecret } from "@/lib/crypto";
+import { syncGmailForUser } from "@/lib/gmail-sync";
+import { monthsAgoUnixSeconds } from "@/lib/gmail-query";
 
 // Next step in the onboarding chain once Gmail is connected.
 const BANK_CONNECTION_URL = process.env.BANK_CONNECTION_URL ?? "https://bankconnection.getvouch.club/bank";
@@ -69,6 +71,16 @@ export async function GET(req: NextRequest) {
 
     const response = NextResponse.redirect(BANK_CONNECTION_URL);
     response.cookies.set(GMAIL_OAUTH_STATE_COOKIE, "", { path: "/", maxAge: 0 });
+
+    try {
+      await syncGmailForUser(user.id, {
+        sinceUnixSeconds: monthsAgoUnixSeconds(1),
+        maxMessages: 300,
+      });
+    } catch (syncErr) {
+      console.error("Initial Gmail sync failed (non-fatal):", syncErr);
+    }
+
     return response;
   } catch (err) {
     console.error("Gmail OAuth callback failed:", err);
