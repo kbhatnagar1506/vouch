@@ -301,6 +301,31 @@ limit → freeze → decline frozen → unfreeze → approve → auto-cancel →
 decline on the dead card, with the transaction landing in
 `card_transactions` and the key's `last_used_at` updating.
 
+## Demo checkout (`create_checkout` / `void_checkout`)
+
+Two extra MCP tools, registered only when `DEMO_CHECKOUT_STRIPE_KEY` is set,
+that give the agent a merchant to pay so the full loop can be shown without
+involving a third-party shop: mint a card, authorize it, watch the
+single-use card cancel itself on contact, then release the hold.
+
+`create_checkout` returns a Stripe Checkout URL. **Every session is created
+with `capture_method: "manual"`, and there is deliberately no capture tool
+anywhere in this codebase** — the card is authorized over the real card
+network (which is what makes Stripe call our `issuing_authorization.request`
+webhook for real), but the money is never taken. `void_checkout` cancels the
+uncaptured payment, which releases the hold immediately; a capture-then-
+refund would move real money and take days to come back.
+
+Amounts are bounded to $0.50–$50.00. An agent picks the number, and a stuck
+authorization is a nuisance at $50 and a problem at $5,000.
+
+`DEMO_CHECKOUT_STRIPE_KEY` is an account with **charges enabled**, which is
+not the same account as the Issuing one `STRIPE_SECRET_KEY` points at.
+
+Name the line item honestly — the operator's own brand or a plain
+description. Putting another company's name on a payment page shown to an
+audience is not something to do for a nicer screenshot.
+
 ## Connecting an agent (MCP)
 
 `/cards` has an **Agent access** panel: name a key, click Create key, and

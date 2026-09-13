@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { User } from "@/lib/auth";
+import { createCheckout, isCheckoutConfigured, voidPayment } from "@/lib/demo-checkout";
 import {
   cancelCard,
   createVirtualCardWithSecrets,
@@ -212,6 +213,69 @@ export function buildMcpServer(user: User, termsAcceptanceIp: string): McpServer
       };
     },
   );
+
+  // Registered only when a checkout account is configured — without it these
+  // would be dead tools an agent keeps trying and failing to use.
+  if (isCheckoutConfigured()) {
+    server.registerTool(
+      "create_checkout",
+      {
+        title: "Create a checkout page to pay a card on",
+        description:
+          "Creates a Stripe Checkout page that a card from create_temporary_card can be paid on, and returns its URL. AUTHORIZATION ONLY: the payment is created with manual capture and is never captured, so no money is taken — it exists to put a real authorization on the card (which is what makes the issuing webhook fire and a single-use card auto-cancel). Release it afterwards with void_checkout.",
+        inputSchema: {
+          amount_cents: z.number().int().min(50).max(5000).describe("Amount to authorize, in cents. Minimum 50, maximum 5000."),
+          description: z
+            .string()
+            .describe("What the line item is called on the checkout page. Use a plain description; do not name a company that isn't the operator."),
+        },
+        outputSchema: {
+          url: z.string(),
+          payment_intent_id: z.string().nullable(),
+          amount_cents: z.number(),
+        },
+      },
+      async ({ amount_cents, description }) => {
+        const checkout = await createCheckout({ amountCents: amount_cents, description });
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `Checkout ready for $${(checkout.amountCents / 100).toFixed(2)} — ${checkout.description}\n` +
+                `${checkout.url}\n` +
+                `Pay it with the card, then release the hold with void_checkout (payment_intent_id ${checkout.paymentIntentId ?? "unknown"}). Nothing is captured.`,
+            },
+          ],
+          structuredContent: {
+            url: checkout.url,
+            payment_intent_id: checkout.paymentIntentId,
+            amount_cents: checkout.amountCents,
+          },
+        };
+      },
+    );
+
+    server.registerTool(
+      "void_checkout",
+      {
+        title: "Release a checkout authorization",
+        description:
+          "Cancels an uncaptured payment, releasing the hold on the card immediately. Nothing was ever captured, so there is no refund to wait for.",
+        inputSchema: { payment_intent_id: z.string().describe("From create_checkout.") },
+        outputSchema: { status: z.string(), amount_cents: z.number() },
+      },
+      async ({ payment_intent_id }) => {
+        const result = await voidPayment(payment_intent_id);
+        return {
+          content: [
+            { type: "text", text: `Released $${(result.amountCents / 100).toFixed(2)} — payment is now ${result.status}. Nothing was captured.` },
+          ],
+          structuredContent: { status: result.status, amount_cents: result.amountCents },
+        };
+      },
+    );
+  }
 
   return server;
 }
