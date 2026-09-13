@@ -92,8 +92,48 @@ interface ConnectorRow {
   detail: string | null;
 }
 
+/**
+ * Optional-table lookups, each isolated in its own try/catch.
+ *
+ * These live in migrations owned by other branches (identity-verification,
+ * card-issuing) that a given database may not have applied yet. They are
+ * deliberately NOT folded into the connectors UNION below: a single missing
+ * table would fail that whole query and take the entire dashboard with it,
+ * rather than just hiding one row.
+ */
+async function agentAccessDetail(userId: string): Promise<string | null> {
+  try {
+    const { rows } = await pool.query<{ active: number; last_used_at: Date | null }>(
+      `select count(*) filter (where revoked_at is null)::int as active,
+              max(last_used_at) as last_used_at
+       from mcp_api_keys where user_id = $1`,
+      [userId],
+    );
+    const row = rows[0];
+    if (!row || row.active === 0) return null;
+    const used = row.last_used_at
+      ? `last used ${new Date(row.last_used_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+      : "never used";
+    return `${row.active} key${row.active === 1 ? "" : "s"} · ${used}`;
+  } catch {
+    return null;
+  }
+}
+
+async function identityDetail(userId: string): Promise<string | null> {
+  try {
+    const { rows } = await pool.query<{ status: string }>(
+      "select status from identity_verifications where user_id = $1",
+      [userId],
+    );
+    return rows[0]?.status ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getRealDashboardData(user: User): Promise<DashboardData> {
-  const [charges, cards, spendRows, plaidAccount, txRows, connectorRows] = await Promise.all([
+  const [charges, cards, spendRows, plaidAccount, txRows, connectorRows, agentAccess, identityStatus] = await Promise.all([
     pool.query<MerchantChargeRow>(
       `select
          m.merchant,
@@ -153,6 +193,8 @@ export async function getRealDashboardData(user: User): Promise<DashboardData> {
        (select 'voice' as source, to_char(created_at, 'Mon DD, YYYY') as detail from voice_enrollments where user_id = $1)`,
       [user.id],
     ),
+    agentAccessDetail(user.id),
+    identityDetail(user.id),
   ]);
 
   // ---- Subscriptions: merge Gmail-derived merchants with issued cards ----
@@ -367,6 +409,35 @@ export async function getRealDashboardData(user: User): Promise<DashboardData> {
       logo: null,
       state: connMap.has("backboard") ? "connected" : "action",
       detail: connMap.has("backboard") ? "Memory & routing synced" : "Not connected yet",
+    },
+    {
+      id: "identity",
+      name: "Identity",
+      initial: "I",
+      color: "#4f46e5",
+      logo: null,
+      // Only `approved` means verified — `completed` just means the user
+      // reached the last screen of Persona's flow. See the
+      // identity-verification branch's docs/IDENTITY.md.
+      state: identityStatus === "approved" ? "connected" : "action",
+      detail:
+        identityStatus === "approved"
+          ? "ID + selfie verified · via Persona"
+          : identityStatus
+            ? `Verification ${identityStatus.replace(/_/g, " ")}`
+            : "Verify to let Vouch act for you",
+    },
+    {
+      id: "mcp",
+      name: "Agent access",
+      initial: "M",
+      color: "#0f766e",
+      logo: null,
+      // The card-issuing branch's MCP server: it exposes card issuance as
+      // MCP tools, so Claude (or any MCP-speaking agent) can mint, freeze
+      // and cancel cards on this user's behalf with a bearer key.
+      state: agentAccess ? "connected" : "action",
+      detail: agentAccess ? `MCP · ${agentAccess}` : "No agent keys yet",
     },
     {
       id: "voice",
