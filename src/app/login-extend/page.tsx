@@ -3,10 +3,10 @@ import { redirect } from "next/navigation";
 import pool from "@/lib/db";
 import { verifySession, SESSION_COOKIE_NAME } from "@/lib/auth";
 
-// Where a logged-in user goes next — the bank-connection service (a
-// sibling branch/subdomain sharing this session cookie). Onboarding was
-// removed as an extra step.
-const BANK_CONNECTION_URL = process.env.BANK_CONNECTION_URL ?? "https://bankconnection.getvouch.club/bank";
+// Where a logged-in user goes next — first step of the onboarding chain
+// (Gmail -> bank -> voice registration), each a sibling branch/subdomain
+// sharing this session cookie.
+const GMAIL_CONNECTOR_URL = process.env.GMAIL_CONNECTOR_URL ?? "https://gmail.getvouch.club/connect";
 
 export default async function LoginExtendPage() {
   const cookieStore = await cookies();
@@ -22,5 +22,5 @@ export default async function LoginExtendPage() {
     redirect("/login");
   }
 
-  redirect(BANK_CONNECTION_URL);
+  redirect(GMAIL_CONNECTOR_URL);
 }

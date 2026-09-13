@@ -5,10 +5,9 @@ import Link from "next/link";
 import pool from "@/lib/db";
 import { verifySession, SESSION_COOKIE_NAME } from "@/lib/auth";
 
-// Where a newly signed-up user goes next — the bank-connection service
-// (a sibling branch/subdomain sharing this session cookie). Same
-// destination as login-extend; onboarding was removed as an extra step.
-const BANK_CONNECTION_URL = process.env.BANK_CONNECTION_URL ?? "https://bankconnection.getvouch.club/bank";
+// Where a newly signed-up user goes next — first step of the onboarding
+// chain (Gmail -> bank -> voice registration), same as login-extend.
+const GMAIL_CONNECTOR_URL = process.env.GMAIL_CONNECTOR_URL ?? "https://gmail.getvouch.club/connect";
 
 export default async function SignupExtendPage() {
   const cookieStore = await cookies();
@@ -47,14 +46,14 @@ export default async function SignupExtendPage() {
         <p className="mb-6 text-sm text-slate-500">
           Welcome, {user.name}. Your account for{" "}
           <span className="font-semibold text-slate-700">{user.email}</span> is
-          ready. Let&apos;s connect your bank account.
+          ready. Let&apos;s get you set up.
         </p>
 
         <Link
-          href={BANK_CONNECTION_URL}
+          href={GMAIL_CONNECTOR_URL}
           className="block w-full rounded-[10px] bg-blue-600 py-3 text-center text-[15px] font-bold text-white transition hover:brightness-110"
         >
-          Connect your bank
+          Continue
         </Link>
       </div>
     </div>
