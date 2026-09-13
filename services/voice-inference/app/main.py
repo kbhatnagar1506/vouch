@@ -3,7 +3,7 @@ import os
 
 from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile, Form
 
-from . import models
+from . import models, vad
 from .audio import decode_to_waveform, duration_seconds
 
 app = FastAPI(title="vouch-voice-inference")
@@ -30,13 +30,14 @@ def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
 
 @app.on_event("startup")
 def preload_models() -> None:
-    # Loads both models into memory once at process start, rather than
+    # Loads all models into memory once at process start, rather than
     # lazily on the first request — combined with a Cloud Run startup
     # probe against /health (see docs/VOICE.md), this keeps a freshly
     # started instance out of traffic rotation until it's actually ready,
     # so no real request ever pays the model-load cost.
     models.get_speaker_model()
     models.spoof_detector.load()
+    vad.get_vad_model()
 
 
 @app.get("/health")
@@ -46,9 +47,22 @@ def health():
     return {"ok": True}
 
 
+async def _decode_and_trim(audio: UploadFile):
+    """Decodes the upload and trims it to just the detected speech, via
+    Silero VAD — a real speech-activity model instead of the crude
+    peak-amplitude gate the client used to rely on alone. Raises a 422 if
+    no speech was detected at all, rather than silently embedding
+    silence/noise (which is what was producing unstable scores)."""
+    waveform = decode_to_waveform(await audio.read())
+    trimmed = vad.trim_to_speech(waveform)
+    if trimmed is None:
+        raise HTTPException(status_code=422, detail="no_speech_detected")
+    return trimmed
+
+
 @app.post("/embed", dependencies=[Depends(require_api_key)])
 async def embed(audio: UploadFile):
-    waveform = decode_to_waveform(await audio.read())
+    waveform = await _decode_and_trim(audio)
     embedding = models.embed(waveform)
     return {
         "embedding": embedding,
@@ -60,7 +74,7 @@ async def embed(audio: UploadFile):
 @app.post("/verify", dependencies=[Depends(require_api_key)])
 async def verify(audio: UploadFile, reference_embedding: str = Form(...)):
     reference = json.loads(reference_embedding)
-    waveform = decode_to_waveform(await audio.read())
+    waveform = await _decode_and_trim(audio)
     embedding = models.embed(waveform)
     score = models.cosine_similarity(embedding, reference)
     threshold = float(os.environ.get("VOICE_MATCH_THRESHOLD", DEFAULT_MATCH_THRESHOLD))
@@ -69,7 +83,7 @@ async def verify(audio: UploadFile, reference_embedding: str = Form(...)):
 
 @app.post("/spoof-check", dependencies=[Depends(require_api_key)])
 async def spoof_check(audio: UploadFile):
-    waveform = decode_to_waveform(await audio.read())
+    waveform = await _decode_and_trim(audio)
     score = models.spoof_detector.score(waveform)
     if score is None:
         return {"spoof_score": None, "is_spoof": False, "model_loaded": False}

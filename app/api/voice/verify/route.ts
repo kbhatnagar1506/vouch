@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser, UnauthorizedError } from "@/lib/session";
 import { pool } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
-import { verifyAudio, checkSpoof } from "@/lib/voice-service";
+import { verifyAudio, checkSpoof, NoSpeechError } from "@/lib/voice-service";
 
 export async function POST(request: Request) {
   try {
@@ -24,10 +24,15 @@ export async function POST(request: Request) {
     }
     const referenceEmbedding: number[] = JSON.parse(decryptSecret(enrollment.embedding));
 
-    const [speaker, spoof] = await Promise.all([
-      verifyAudio(audio, referenceEmbedding),
-      checkSpoof(audio),
-    ]);
+    let speaker, spoof;
+    try {
+      [speaker, spoof] = await Promise.all([verifyAudio(audio, referenceEmbedding), checkSpoof(audio)]);
+    } catch (error) {
+      if (error instanceof NoSpeechError) {
+        return NextResponse.json({ error: "No speech detected in this clip.", noSpeech: true }, { status: 422 });
+      }
+      throw error;
+    }
 
     const spoofed = spoof.model_loaded && spoof.is_spoof;
     // Advisory only for now, not gating — see the enroll route for why

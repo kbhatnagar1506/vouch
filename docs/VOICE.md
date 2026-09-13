@@ -36,20 +36,38 @@ Browser mic  ──▶  /api/voice/enroll|verify  ──▶  voice-inference (Cl
 
 - **Speaker verification**: [SpeechBrain's ECAPA-TDNN](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb),
   pretrained on VoxCeleb, used as a **frozen embedding extractor** — no
-  training needed to stand this up. Enrollment stores one reference
-  embedding per user (AES-256-GCM encrypted at rest, same treatment
-  `bank-connection` gives Plaid access tokens — see `lib/crypto.ts`);
-  verification compares a new clip's embedding to it by cosine similarity
-  against `VOICE_MATCH_THRESHOLD` (default `0.5` — the original `0.75`
-  guess rejected genuine same-speaker verifications at 66.9% similarity in
-  real testing; this checkpoint's raw, unnormalized cosine scores run
-  lower than intuition suggests, and 0.5 still isn't calibrated against
-  real negative/different-speaker trials, just less wrong than 0.75 was).
+  training needed to stand this up. Enrollment records `ENROLL_SAMPLES`
+  (3) clips (`app/voice/page.tsx`) and stores their **averaged** embedding
+  as the reference (AES-256-GCM encrypted at rest, same treatment
+  `bank-connection` gives Plaid access tokens — see `lib/crypto.ts`) —
+  a centroid over several recordings is less sensitive to any one of them
+  being atypical than trusting a single clip. Verification compares a new
+  clip's embedding to it by cosine similarity against
+  `VOICE_MATCH_THRESHOLD` (default `0.5` — the original `0.75` guess
+  rejected genuine same-speaker verifications at 66.9% similarity in real
+  testing; this checkpoint's raw, unnormalized cosine scores run lower
+  than intuition suggests, and 0.5 still isn't calibrated against real
+  negative/different-speaker trials, just less wrong than 0.75 was).
   The live monitor (`app/voice/page.tsx`) records in ~4.5s windows —
   shorter clips produced unusably noisy embeddings (an 18% same-speaker
   score at a 2.2s window) since ECAPA-TDNN needs a few seconds of clean
   speech, and each new `MediaRecorder` instance pays an opus warm-up cost
-  right at the start of its window.
+  right at the start of its window — and smooths status over a rolling
+  average of the last 3 scores (`lib/use-live-monitor.ts`) rather than
+  reacting to any single window, since even at 4.5s same-speaker scores
+  still ranged 0.09-0.61 across one session.
+- **Voice-activity detection**: [Silero VAD](https://github.com/snakers4/silero-vad)
+  (`app/vad.py`) trims every upload to just the detected speech before it
+  reaches either model — replacing the client's original crude
+  "was the peak amplitude loud enough" gate, which let non-speech noise
+  (breath, background sound, brief silence) dilute the embedding. If no
+  speech is detected at all, `/embed`, `/verify`, and `/spoof-check` all
+  422 with `no_speech_detected`; `lib/voice-service.ts`'s `NoSpeechError`
+  lets callers (the enroll/verify routes, and the live monitor) treat that
+  the same as a silent window rather than a real error. Ships its model
+  weights inside the pip package itself — no network fetch at runtime, no
+  HF-style rate-limit risk (see "Anti-spoofing" below for how that bit the
+  speaker model during setup).
 - **Anti-spoofing**: [AASIST](https://github.com/clovaai/aasist), a graph
   attention network pretrained on ASVspoof2019 LA to flag synthetic,
   voice-converted, or replayed audio. Vendored unmodified (MIT license —
@@ -198,3 +216,14 @@ is a separate decision point:
    speakers and/or AASIST on collected spoof examples, evaluate against
    held-out data, and only then swap the pretrained checkpoints above for
    fine-tuned ones.
+
+## Calibrating VOICE_MATCH_THRESHOLD with real data
+
+Every `/api/voice/verify` call already logs `speaker_score`, `spoof_score`,
+and `passed` to `voice_verifications` (see "Data model" above), keyed by
+`user_id` — so once there's at least one genuine negative trial (a
+different person's voice tried against an existing enrollment, not just
+repeated self-verification), query that table for the score distributions
+of real matches vs. real non-matches and pick a threshold that actually
+separates them, rather than the current guess. No new instrumentation
+needed — just real trial data to query.

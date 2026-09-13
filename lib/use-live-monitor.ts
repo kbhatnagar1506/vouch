@@ -33,7 +33,7 @@ const SCORE_HISTORY_SIZE = 3;
  * rolling average of the last few speaker-match scores, not any single
  * window, and holds through silence in between.
  */
-export function useLiveMonitor(verify: (blob: Blob) => Promise<{ score: number; threshold: number }>) {
+export function useLiveMonitor(verify: (blob: Blob) => Promise<{ score: number; threshold: number } | null>) {
   const [status, setStatus] = useState<LiveStatus>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -90,15 +90,21 @@ export function useLiveMonitor(verify: (blob: Blob) => Promise<{ score: number; 
         }
 
         try {
-          const { score, threshold } = await verify(blob);
+          const result = await verify(blob);
           if (!activeRef.current) break;
+          if (result === null) {
+            // The amplitude gate passed but Silero VAD found no actual
+            // speech (e.g. a thump, breath, background noise) — hold
+            // status rather than treating it as a real data point.
+            continue;
+          }
 
           const history = scoreHistoryRef.current;
-          history.push(score);
+          history.push(result.score);
           if (history.length > SCORE_HISTORY_SIZE) history.shift();
           const average = history.reduce((a, b) => a + b, 0) / history.length;
 
-          setStatus(average >= threshold ? "match" : "mismatch");
+          setStatus(average >= result.threshold ? "match" : "mismatch");
         } catch {
           if (!activeRef.current) break;
           setStatus("error");

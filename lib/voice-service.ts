@@ -62,6 +62,14 @@ export interface SpoofCheckResult {
   model_loaded: boolean;
 }
 
+/** The upload didn't contain any detectable speech (Silero VAD found nothing) — not a real error, callers should treat it like silence. */
+export class NoSpeechError extends Error {
+  constructor() {
+    super("No speech detected in this audio.");
+    this.name = "NoSpeechError";
+  }
+}
+
 async function postAudio<T>(path: string, audio: Blob, extraFields: Record<string, string> = {}): Promise<T> {
   const form = new FormData();
   form.set("audio", audio, "sample.webm");
@@ -77,6 +85,9 @@ async function postAudio<T>(path: string, audio: Blob, extraFields: Record<strin
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    if (res.status === 422 && text.includes("no_speech_detected")) {
+      throw new NoSpeechError();
+    }
     throw new Error(`Voice service ${path} failed (${res.status}): ${text}`);
   }
   return res.json() as Promise<T>;

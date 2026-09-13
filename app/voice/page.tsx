@@ -19,6 +19,10 @@ interface VerifyResult {
 }
 
 const ENROLL_PROMPT = "My voice is my password. Vouch will always verify it's really me.";
+// Averaging several enrollment clips into one reference embedding makes
+// it less likely that a single noisy/atypical recording becomes the
+// permanent fingerprint compared against forever.
+const ENROLL_SAMPLES = 3;
 
 function MicIcon() {
   return (
@@ -154,16 +158,22 @@ export default function VoicePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<VerifyResult | null>(null);
+  const [enrollBlobs, setEnrollBlobs] = useState<Blob[]>([]);
 
   const recorder = useVoiceRecorder();
 
-  const verifyChunk = useCallback(async (blob: Blob): Promise<{ score: number; threshold: number }> => {
+  const verifyChunk = useCallback(async (blob: Blob): Promise<{ score: number; threshold: number } | null> => {
     const form = new FormData();
     form.set("audio", blob, "chunk.webm");
     const res = await fetch("/api/voice/verify", { method: "POST", body: form });
-    const data: VerifyResult = await res.json();
-    if (!res.ok) throw new Error((data as unknown as { error?: string }).error ?? "Verification failed");
-    setLastResult(data);
+    const data = await res.json();
+    if (!res.ok) {
+      // No speech in this window (VAD found nothing) — not a real error,
+      // treat it the same as a silent window rather than flagging it.
+      if (data.noSpeech) return null;
+      throw new Error(data.error ?? "Verification failed");
+    }
+    setLastResult(data as VerifyResult);
     return { score: data.speaker.score, threshold: data.speaker.threshold };
   }, []);
 
@@ -200,22 +210,27 @@ export default function VoicePage() {
     setError(null);
     setMessage(null);
     setLastResult(null);
+    setEnrollBlobs([]);
   };
 
-  const submitEnroll = async (blob: Blob) => {
+  const submitEnroll = async (blobs: Blob[]) => {
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
       const form = new FormData();
-      form.set("audio", blob, "enroll.webm");
+      blobs.forEach((blob, i) => form.append("audio", blob, `enroll-${i}.webm`));
       const res = await fetch("/api/voice/enroll", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Enrollment failed");
       setMessage("Voice enrolled. Switch to Live Monitor to try it out.");
+      setEnrollBlobs([]);
       loadStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      // Restart the set of recordings on any failure (e.g. one clip had
+      // no detectable speech) rather than trying to patch a single one in.
+      setEnrollBlobs([]);
     } finally {
       setBusy(false);
     }
@@ -225,7 +240,13 @@ export default function VoicePage() {
     if (recorder.state === "recording") {
       const blob = await recorder.stop();
       recorder.reset();
-      if (blob) await submitEnroll(blob);
+      if (!blob) return;
+      const nextBlobs = [...enrollBlobs, blob];
+      if (nextBlobs.length >= ENROLL_SAMPLES) {
+        await submitEnroll(nextBlobs);
+      } else {
+        setEnrollBlobs(nextBlobs);
+      }
     } else {
       setError(null);
       setMessage(null);
@@ -289,8 +310,19 @@ export default function VoicePage() {
           <>
             <h1 className="mb-1.5 text-center text-2xl font-bold tracking-tight text-slate-900">Enroll your voice</h1>
             <p className="mb-7 text-center text-sm text-slate-500">
-              {status?.enrolled ? "Record again any time to re-enroll." : "Record a short sample once, and Vouch remembers your voice."}
+              {status?.enrolled
+                ? "Record 3 fresh clips any time to re-enroll."
+                : "Record 3 short clips, averaged into one reference — sturdier than relying on a single recording."}
             </p>
+
+            <div className="mb-6 flex justify-center gap-2">
+              {Array.from({ length: ENROLL_SAMPLES }).map((_, i) => (
+                <span
+                  key={i}
+                  className={`h-2 w-2 rounded-full ${i < enrollBlobs.length ? "bg-blue-600" : "bg-slate-200"}`}
+                />
+              ))}
+            </div>
 
             <p className="mb-6 rounded-xl bg-slate-50 p-4 text-center text-sm text-slate-600">
               Read this out loud, clearly: <br />
@@ -300,7 +332,11 @@ export default function VoicePage() {
             <div className="flex flex-col items-center gap-3 py-2">
               <RecordButton recording={recorder.state === "recording"} busy={busy} level={recorder.level} onClick={onRecordClick} />
               <p className="text-[13px] font-medium text-slate-400">
-                {recorder.state === "recording" ? "Recording — tap to stop" : busy ? "Processing…" : "Tap to record"}
+                {recorder.state === "recording"
+                  ? "Recording — tap to stop"
+                  : busy
+                    ? "Processing…"
+                    : `Tap to record ${enrollBlobs.length + 1} of ${ENROLL_SAMPLES}`}
               </p>
             </div>
 
