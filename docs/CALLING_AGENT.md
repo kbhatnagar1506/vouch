@@ -112,6 +112,43 @@ Run `npm run calling-agent:sync-assistant` after changing any of this (or
 on first setup) to push it to Vapi. It upserts by assistant name
 (`vouch-calling-agent`) so re-running it is always safe.
 
+### Picking an ElevenLabs voice (free-tier constraint)
+
+On a **free** ElevenLabs plan, only voices whose category is `premade`
+can be synthesized through the API. A Voice Library voice (category
+`professional`) returns HTTP 402 `paid_plan_required` — *"Free users
+cannot use library voices via the API."*
+
+This is worth knowing because of how it fails: Vapi does not surface that
+402. It reports only `pipeline-error-eleven-labs-voice-failed` and ends
+the call about five seconds in, with an empty transcript and no other
+signal — indistinguishable at a glance from a bad voice id or a bad API
+key. Both of those check out fine in this case: the voice *is* on the
+account and `GET /v1/voices` lists it. It's the plan that blocks it.
+
+To diagnose it directly, bypass Vapi and synthesize against ElevenLabs:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -X POST "https://api.elevenlabs.io/v1/text-to-speech/<voice-id>" \
+  -H "xi-api-key: $ELEVENLABS_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"text":"test","model_id":"eleven_turbo_v2_5"}'
+```
+
+402 means the plan, 401 means the key, 200 means the voice is usable and
+the problem is elsewhere. `GET /v1/voices` lists every voice on the
+account with its `category`, which is what tells you whether a given id
+is `premade` or `professional` before you ever place a call.
+
+Upgrading the plan unlocks the library voices, and switching to one is
+then just an `ELEVENLABS_VOICE_ID` change — no code edit.
+
+The TTS `model` is pinned in `voiceConfig()` rather than left to Vapi's
+default. `eleven_turbo_v2_5` is the low-latency option and
+`eleven_multilingual_v2` is noticeably more natural at the cost of
+roughly 200–400ms per response — a real tradeoff on a phone call, where
+that lands as a pause before the agent speaks.
+
 ## Backboard context (purchase_verification only)
 
 `app/api/calling-agent/calls/route.ts` looks up the caller's Backboard
