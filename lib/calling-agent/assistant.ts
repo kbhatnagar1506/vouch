@@ -175,23 +175,23 @@ function modelConfig(messages: Vapi.OpenAiMessage[]): Vapi.CreateAssistantDtoMod
   return { provider, model, messages, temperature: 0.3 } as Vapi.CreateAssistantDtoModel;
 }
 
-// ElevenLabs' "George — Warm, Captivating Storyteller". Must be a **premade**
-// voice, not a Voice Library ("professional") one: a library voice 402s with
-// `paid_plan_required` — "Free users cannot use library voices via the API" —
-// which Vapi surfaces only as the opaque
-// pipeline-error-eleven-labs-voice-failed, killing the call ~5 seconds in
-// with no transcript. That's what the previous default here ("Hale",
-// wWWn96OtTHu1sn8SRGEr) hit: it IS on the account and GET /v1/voices lists
-// it, so presence checks pass — it's the *plan*, not the voice id, that
-// blocks it. Confirmed by synthesizing directly against both:
-// Hale -> HTTP 402, Brian -> HTTP 200.
+// ElevenLabs' "Hale — Expressive, Deep and Emotive", matching AGENT_NAME.
 //
-// So: on the free tier, only voices with category "premade" work. Upgrading
-// the ElevenLabs plan re-opens the library ones, at which point any id can
-// go in ELEVENLABS_VOICE_ID without touching this file. Either way the agent
-// still introduces itself as AGENT_NAME above — the persona's name is in the
-// prompt and is independent of which voice speaks it.
-const DEFAULT_ELEVENLABS_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
+// This is a **Voice Library** ("professional") voice, which needs a paid
+// ElevenLabs plan. On a free plan it 402s with `paid_plan_required` —
+// "Free users cannot use library voices via the API" — and Vapi surfaces
+// that only as the opaque pipeline-error-eleven-labs-voice-failed, killing
+// the call ~5 seconds in with no transcript and no clue. Presence checks
+// don't catch it either: the voice IS on the account and `GET /v1/voices`
+// lists it. It's the plan, not the voice id.
+//
+// So if calls start dying instantly on TTS, check the plan before the id.
+// Synthesizing directly against ElevenLabs separates them: 402 means the
+// plan, 401 the key, 200 means look elsewhere. A **premade** voice (e.g.
+// "George", JBFqnCBsd6RMkjVDRZzb) works on any plan and is the fallback
+// worth reaching for, via ELEVENLABS_VOICE_ID and without touching this
+// file.
+const DEFAULT_ELEVENLABS_VOICE_ID = "wWWn96OtTHu1sn8SRGEr";
 
 function voiceConfig(): Vapi.CreateAssistantDtoVoice {
   return {
