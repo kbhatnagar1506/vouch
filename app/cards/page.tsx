@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { CardManager } from "@/components/card-manager";
+
+// This page doubles as the Stripe step of onboarding (login -> Gmail ->
+// bank -> here -> voice -> dashboard), so it needs somewhere to go next.
+// Every step in the chain is skippable: nothing here is required to reach
+// the dashboard, and a card can be minted later from the dashboard itself.
+const VOICE_REGISTER_URL =
+  process.env.NEXT_PUBLIC_VOICE_REGISTER_URL ?? "https://voice.getvouch.club/voice/register";
 
 export default function CardsPage() {
   const [email, setEmail] = useState<string | null>(null);
@@ -35,6 +43,19 @@ export default function CardsPage() {
         </div>
 
         <CardManager />
+
+        <Link
+          href={VOICE_REGISTER_URL}
+          className="mt-6 block w-full rounded-xl bg-blue-600 px-5 py-3.5 text-center text-sm font-semibold text-white transition hover:bg-blue-700"
+        >
+          Continue
+        </Link>
+        <Link
+          href={VOICE_REGISTER_URL}
+          className="mt-3 block text-center text-[13px] font-semibold text-slate-400 transition hover:text-slate-600"
+        >
+          Skip for now
+        </Link>
       </div>
     </div>
   );
