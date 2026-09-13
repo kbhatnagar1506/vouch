@@ -273,11 +273,25 @@ and leaves the rest of the system untouched:
   transaction and auto-cancels a single-use card — the bookkeeping the real
   webhook does on `issuing_transaction.created`, done inline because nothing
   external fires a webhook for a mock purchase.
-- `create_temporary_card` returns a **card number** in this mode only. It is
-  random digits behind Stripe's well-known `4242` test prefix, it is never
-  persisted, it never reaches a payment network, and it authorizes nothing.
-  A real Stripe card never returns its PAN from the server — that is
-  revealed client-side via an ephemeral key (see "PCI scope").
+- `create_temporary_card` returns a **card number** in this mode only. By
+  default it is random digits behind Stripe's `4242` test prefix, never
+  persisted and authorizing nothing. Set `MOCK_CARD_NUMBER` (with
+  `MOCK_CARD_CVC` and `MOCK_CARD_EXP_MONTH`/`MOCK_CARD_EXP_YEAR`) to pin a
+  card provisioned elsewhere, so every issuance shows the same number —
+  what a live demo wants. It stays in env rather than in source: a card
+  number committed here would live in git history and every clone from then
+  on. A card issued through Stripe never returns its PAN from the server at
+  all — that is revealed client-side via an ephemeral key (see "PCI scope").
+- The "authorizes nothing" caveat is attached only to a locally generated
+  number, where it is true. A pinned card is a real card, so it isn't
+  labelled that way; `generated: false` in the tool's structured output is
+  what tells the two apart.
+- **Pinning a number changes only what this server displays.** It does not
+  make a purchase succeed anywhere: `simulate_purchase` still decides
+  locally and never contacts a payment network, and whether the card itself
+  clears at a real merchant depends entirely on the Stripe account that
+  issued it (a test-mode card is not on the card networks and will be
+  declined).
 
 Default is `live`, so a missing env var can never silently mint fake cards.
 

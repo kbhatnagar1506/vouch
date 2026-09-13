@@ -71,6 +71,15 @@ export interface MockCardSecrets {
   /** Shown once at creation and never persisted — see the module comment. */
   number: string;
   cvc: string;
+  /**
+   * True when the number came from MOCK_CARD_NUMBER — a real card the
+   * operator provisioned elsewhere — rather than being randomly generated
+   * here. Callers use this to decide how to describe the card: the
+   * "this number is random and authorizes nothing" caveat is true of a
+   * generated one and false of a pinned one, so it must not be shown for
+   * both.
+   */
+  pinned: boolean;
 }
 
 export async function createMockCard(
@@ -103,7 +112,7 @@ export async function createMockCard(
       input.singleUse ?? true,
     ],
   );
-  return { row: result.rows[0], secrets: { number: pan, cvc } };
+  return { row: result.rows[0], secrets: { number: pan, cvc, pinned: fixed !== null } };
 }
 
 export interface MockPurchaseResult {

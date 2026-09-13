@@ -68,12 +68,16 @@ export function buildMcpServer(user: User, termsAcceptanceIp: string): McpServer
       outputSchema: {
         card: z.object(CARD_SHAPE).optional(),
         phone_required: z.boolean().optional(),
-        // Present only in mock mode (CARD_ISSUING_MODE=mock), where the
-        // number is random digits that authorize nothing. A real Stripe
-        // card never returns its PAN here.
+        // Returned only when this deployment hands out a card number
+        // directly (CARD_ISSUING_MODE=mock). A card issued through Stripe
+        // never returns its PAN here — that stays out of the server
+        // entirely and is revealed client-side via an ephemeral key.
         card_number: z.string().optional(),
         cvc: z.string().optional(),
-        mock: z.boolean().optional(),
+        // True only for a locally generated number, which authorizes
+        // nothing. A pinned card (MOCK_CARD_NUMBER) is a real card the
+        // operator provisioned, so it is not flagged.
+        generated: z.boolean().optional(),
       },
     },
     async ({ label, merchant, spending_limit_cents, single_use, phone_number }) => {
@@ -91,10 +95,21 @@ export function buildMcpServer(user: User, termsAcceptanceIp: string): McpServer
             content: [
               {
                 type: "text",
-                text: `Created card: ${cardText(card)}\nNumber ${secrets.number}  exp ${String(card.expMonth).padStart(2, "0")}/${card.expYear}  CVC ${secrets.cvc}\n(Mock card — Stripe Issuing is not provisioned on this account, so this number is random and authorizes nothing.)`,
+                // The "authorizes nothing" caveat is true of a number
+                // generated here and false of a pinned one, so it's shown
+                // only for the former rather than blanket-applied to both.
+                text:
+                  `Created card: ${cardText(card)}\n` +
+                  `Number ${secrets.number}  exp ${String(card.expMonth).padStart(2, "0")}/${card.expYear}  CVC ${secrets.cvc}` +
+                  (secrets.pinned ? "" : "\n(Test number generated locally — it authorizes nothing.)"),
               },
             ],
-            structuredContent: { card, card_number: secrets.number, cvc: secrets.cvc, mock: true },
+            structuredContent: {
+              card,
+              card_number: secrets.number,
+              cvc: secrets.cvc,
+              generated: !secrets.pinned,
+            },
           };
         }
         return {
