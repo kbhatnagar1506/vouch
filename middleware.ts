@@ -6,7 +6,10 @@ const PROTECTED_API_PREFIXES = ["/api/calling-agent"];
 // Vapi's servers call the webhook directly (no browser session to send),
 // and it authenticates itself via the x-vapi-secret header instead — see
 // lib/calling-agent/webhook-auth.ts.
-const EXEMPT_PATHS = ["/api/calling-agent/webhook"];
+// The public /demo dashboard has no session to send either. That route
+// never reads a number from its request — it dials DEMO_CALL_NUMBER and
+// nothing else — which is what makes exempting it safe.
+const EXEMPT_PATHS = ["/api/calling-agent/webhook", "/api/calling-agent/demo-call"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
