@@ -210,6 +210,19 @@ export default function VoiceRegisterPage() {
 
             {recorder.error && <p className="mt-3 text-center text-sm text-red-600">{recorder.error}</p>}
             {error && <p className="mt-4 text-center text-sm text-red-600">{error}</p>}
+
+            {/* Every other onboarding step is skippable; this one was the
+                exception, which left a user without a working mic stuck on
+                the last step with no way to reach their dashboard. Voice
+                can be enrolled later from the dashboard. */}
+            {DASHBOARD_URL && (
+              <a
+                href={DASHBOARD_URL}
+                className="mt-6 block text-center text-[13px] font-semibold text-slate-400 transition hover:text-slate-600"
+              >
+                Skip for now
+              </a>
+            )}
           </>
         )}
       </div>
