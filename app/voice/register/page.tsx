@@ -10,10 +10,14 @@ import { useVoiceRecorder } from "@/lib/use-voice-recorder";
 
 const ENROLL_PROMPT = "My voice is my password. Vouch will always verify it's really me.";
 const ENROLL_SAMPLES = 3;
-// Not wired up yet — the dashboard this chain ends at doesn't exist yet.
-// Once it does, set this and registration completes by redirecting there
-// instead of showing the static "You're all set" screen below.
+// Where the onboarding chain ends: the real dashboard. Unset (e.g. local
+// dev without it running) just leaves the success screen up instead of
+// redirecting, so enrollment still completes cleanly on its own.
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL;
+// Long enough to read "You're all set" before the page changes under you —
+// enrollment is the last step, so the confirmation is worth a beat rather
+// than a jump the user never sees.
+const REDIRECT_DELAY_MS = 1400;
 
 function MicIcon() {
   return (
@@ -106,9 +110,11 @@ export default function VoiceRegisterPage() {
   }, []);
 
   useEffect(() => {
-    if (done && DASHBOARD_URL) {
+    if (!done || !DASHBOARD_URL) return;
+    const timer = setTimeout(() => {
       window.location.href = DASHBOARD_URL;
-    }
+    }, REDIRECT_DELAY_MS);
+    return () => clearTimeout(timer);
   }, [done]);
 
   const submitEnroll = async (blobs: Blob[]) => {
@@ -162,7 +168,16 @@ export default function VoiceRegisterPage() {
               <CheckIcon />
             </div>
             <h1 className="mb-1.5 text-2xl font-bold tracking-tight text-slate-900">You&apos;re all set</h1>
-            <p className="text-sm text-slate-500">Your voice is registered. Setup is complete.</p>
+            <p className="text-sm text-slate-500">
+              {DASHBOARD_URL ? "Your voice is registered. Taking you to your dashboard…" : "Your voice is registered. Setup is complete."}
+            </p>
+            {DASHBOARD_URL && (
+              // Manual way through if the redirect is blocked (pop-up/nav
+              // blockers) — the last onboarding step shouldn't dead-end.
+              <a href={DASHBOARD_URL} className="mt-4 inline-block text-sm font-semibold text-blue-600 hover:text-blue-700">
+                Go to dashboard
+              </a>
+            )}
           </div>
         ) : (
           <>
