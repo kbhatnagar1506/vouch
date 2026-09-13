@@ -18,8 +18,10 @@ Two pieces, deployed separately:
 2. **`services/voice-inference`** — a standalone Python/FastAPI service
    doing the actual model inference. Deployed to **Cloud Run**, not
    Vercel — Next.js/Vercel can't run PyTorch model inference natively.
-   The Next.js API routes call it over HTTP with a shared bearer token
-   (`VOICE_SERVICE_API_KEY`).
+   The Next.js API routes call it over HTTP, authenticated two ways (see
+   "Deploying the inference service to Cloud Run" below): a Cloud Run IAM
+   invoker check via a Google-signed ID token, plus this app's own
+   `VOICE_SERVICE_API_KEY` as defense-in-depth.
 
 ```
 Browser mic  ──▶  /api/voice/enroll|verify  ──▶  voice-inference (Cloud Run)
@@ -94,22 +96,52 @@ services, `SESSION_COOKIE_DOMAIN=.getvouch.club`). `middleware.ts` protects
 ## Deploying the inference service to Cloud Run
 
 GCP project: **`patchguard-reakon`** (billing enabled, `run.googleapis.com`
-enabled). From `services/voice-inference`:
+enabled). The org has a domain-restricted-sharing policy that rejects
+`allUsers`/`allAuthenticatedUsers` IAM bindings, so `--allow-unauthenticated`
+isn't available — the service is deployed private and invoked via a
+dedicated service account instead:
 
 ```sh
+# One-time setup: a service account only Next.js uses to call this service,
+# and its own IAM binding scoped to just this Cloud Run service (not the
+# whole project).
+gcloud iam service-accounts create voice-inference-caller \
+  --project patchguard-reakon \
+  --display-name "Vouch voice-inference caller (Next.js -> Cloud Run)"
+
+gcloud run services add-iam-policy-binding vouch-voice-inference \
+  --region us-central1 --project patchguard-reakon \
+  --member "serviceAccount:voice-inference-caller@patchguard-reakon.iam.gserviceaccount.com" \
+  --role roles/run.invoker
+
+gcloud iam service-accounts keys create voice-inference-caller-key.json \
+  --iam-account voice-inference-caller@patchguard-reakon.iam.gserviceaccount.com \
+  --project patchguard-reakon
+# base64 that key and set it as this branch's GCP_VOICE_CALLER_KEY_BASE64
+# (Vercel env var) — see .env.example.
+
+# Deploy / redeploy:
 gcloud run deploy vouch-voice-inference \
   --source . \
   --project patchguard-reakon \
   --region us-central1 \
-  --allow-unauthenticated \
+  --no-allow-unauthenticated \
   --set-env-vars VOICE_SERVICE_API_KEY=<same value as this branch's VOICE_SERVICE_API_KEY> \
   --memory 4Gi --cpu 2
 ```
 
-`--allow-unauthenticated` is fine because the service itself checks the
-`VOICE_SERVICE_API_KEY` bearer token on every model route — `/health` is
-the only open endpoint. Set `VOICE_SERVICE_URL` on this Next.js branch
-(Vercel env var) to the resulting `*.run.app` URL.
+`lib/voice-service.ts` mints a Google-signed ID token from
+`GCP_VOICE_CALLER_KEY_BASE64` (via `google-auth-library`) for every call —
+Cloud Run's own front end checks that in `Authorization` before the
+request even reaches the container. `VOICE_SERVICE_API_KEY` is then
+checked again inside the app via the `X-Api-Key` header (deliberately not
+`Authorization`, which Cloud Run's IAM check already owns) — defense in
+depth against IAM misconfiguration, not the only gate. Set
+`VOICE_SERVICE_URL` (Vercel env var) to the deployed `*.run.app` URL.
+
+A freshly-created IAM binding can take a minute or so to propagate — a
+403 (as opposed to 401) right after `add-iam-policy-binding` usually means
+"give it another moment," not a real misconfiguration.
 
 CPU-only Cloud Run is enough for ECAPA-TDNN inference (embeddings for a
 few seconds of audio take well under a second on CPU); GPU is only needed

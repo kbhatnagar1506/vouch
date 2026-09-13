@@ -1,6 +1,30 @@
 // Server-side client for the voice-inference Cloud Run service
 // (services/voice-inference) — a separate Python/FastAPI deployment, not
 // something Next.js/Vercel can run natively. See docs/VOICE.md.
+//
+// Two layers of auth on every call: Cloud Run's own IAM invoker check
+// (only the voice-inference-caller service account may reach the service
+// at all — enforced via a Google-signed ID token in `Authorization`), and
+// this app's own VOICE_SERVICE_API_KEY (sent as `X-Api-Key`, a separate
+// header so it doesn't collide with the IAM token) as defense-in-depth.
+import { GoogleAuth } from "google-auth-library";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var _voiceServiceAuth: GoogleAuth | undefined;
+}
+
+function getAuth(): GoogleAuth {
+  if (!global._voiceServiceAuth) {
+    const encoded = process.env.GCP_VOICE_CALLER_KEY_BASE64;
+    if (!encoded) {
+      throw new Error("GCP_VOICE_CALLER_KEY_BASE64 is not set. See docs/VOICE.md.");
+    }
+    const credentials = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+    global._voiceServiceAuth = new GoogleAuth({ credentials });
+  }
+  return global._voiceServiceAuth;
+}
 
 function getServiceUrl(): string {
   const url = process.env.VOICE_SERVICE_URL;
@@ -10,12 +34,14 @@ function getServiceUrl(): string {
   return url.replace(/\/$/, "");
 }
 
-function getServiceHeaders(): HeadersInit {
+async function getAuthHeaders(): Promise<Record<string, string>> {
   const apiKey = process.env.VOICE_SERVICE_API_KEY;
   if (!apiKey) {
     throw new Error("VOICE_SERVICE_API_KEY is not set. See docs/VOICE.md.");
   }
-  return { Authorization: `Bearer ${apiKey}` };
+  const client = await getAuth().getIdTokenClient(getServiceUrl());
+  const idTokenHeaders = await client.getRequestHeaders();
+  return { ...idTokenHeaders, "X-Api-Key": apiKey };
 }
 
 export interface EmbedResult {
@@ -45,7 +71,7 @@ async function postAudio<T>(path: string, audio: Blob, extraFields: Record<strin
 
   const res = await fetch(`${getServiceUrl()}${path}`, {
     method: "POST",
-    headers: getServiceHeaders(),
+    headers: await getAuthHeaders(),
     body: form,
   });
 

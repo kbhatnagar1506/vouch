@@ -1,23 +1,25 @@
 import json
 import os
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, Form
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile, Form
 
 from . import models
 from .audio import decode_to_waveform, duration_seconds
 
 app = FastAPI(title="vouch-voice-inference")
-bearer_scheme = HTTPBearer()
 
 DEFAULT_MATCH_THRESHOLD = 0.75
 
-
-def require_api_key(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> None:
+# Cloud Run's own IAM invoker check already authenticates the caller (only
+# the voice-inference-caller service account can reach this service at
+# all — see docs/VOICE.md) and does so via the `Authorization` header, so
+# this app-level check uses a separate header to avoid colliding with it.
+# It's defense-in-depth against IAM misconfiguration, not the only guard.
+def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
     expected = os.environ.get("VOICE_SERVICE_API_KEY")
     if not expected:
         raise HTTPException(status_code=500, detail="VOICE_SERVICE_API_KEY is not set on the server")
-    if credentials.credentials != expected:
+    if x_api_key != expected:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
