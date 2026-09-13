@@ -48,14 +48,29 @@ export default function CallMeButton({
     }
   }
 
+  async function placeDemoCall() {
+    setStep("calling");
+    setError(null);
+    try {
+      const res = await fetch("/api/demo/call", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Couldn't place the call");
+      setStep("done");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStep("error");
+    } finally {
+      setTimeout(() => setStep("idle"), 4200);
+    }
+  }
+
   function onClick() {
     if (step !== "idle") return;
     if (mode === "demo") {
-      // Nothing real to call — same "sounds like the real thing" stub as
-      // the rest of /demo, so the button still shows what it does.
-      setStep("calling");
-      setTimeout(() => setStep("done"), 1400);
-      setTimeout(() => setStep("idle"), 4200);
+      // /demo has no session and no phone number to ask for, so this calls
+      // a fixed number configured on the calling-agent service rather than
+      // anything entered here. See app/api/demo/call/route.ts.
+      placeDemoCall();
       return;
     }
     if (!phoneNumber) {
