@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session-token";
 
 const PROTECTED_PAGE_PREFIXES = ["/cards"];
-const PROTECTED_API_PREFIXES = ["/api/cards"];
+// /api/mcp itself is deliberately NOT in this list (and not in the matcher
+// below at all) — MCP clients aren't browsers and can't carry the
+// vouch_session cookie, so that route authenticates itself via a bearer
+// token instead (see app/api/mcp/route.ts). Only the key-management route
+// (session-authenticated, used from a real browser) is protected here.
+const PROTECTED_API_PREFIXES = ["/api/cards", "/api/mcp/keys"];
 // Stripe's servers call the webhook directly, with no session cookie and
 // no browser involved — a JSON 401 would just make Stripe retry forever.
 const EXEMPT_PATHS = ["/api/stripe/webhook"];
@@ -42,5 +47,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/cards/:path*", "/api/cards/:path*"],
+  matcher: ["/cards/:path*", "/api/cards/:path*", "/api/mcp/keys/:path*"],
 };

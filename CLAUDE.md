@@ -10,14 +10,21 @@ production. `DATABASE_URL` is set as a Production env var in the Vercel
 project — add it to Preview too if preview deploys need DB access (preview
 URLs are also gated by Vercel's SSO-based Deployment Protection by default).
 
-## Temporary cards (Stripe Issuing)
+## Temporary cards (Stripe Issuing) + MCP
 
 The `card-issuing` branch generates disposable virtual cards via Stripe
 Issuing (test/sandbox mode) — one card per transaction by default, auto-
 canceled the moment its first transaction posts, so a subscription tied to
 it can never be charged again. Multi-tenant via the same shared session
-cookie as every other service. See `docs/CARDS.md` for the full setup,
-data model, PCI-scope reasoning, and deployment/subdomain instructions.
+cookie as every other service. The same card lifecycle is also exposed as
+an MCP server (`app/api/mcp`, any Claude- or OpenAI-based agent can use
+it) authenticated via its own bearer API keys rather than the session
+cookie — agents never see a raw card number, only Stripe's non-sensitive
+metadata, and "purchase" means driving a real test-mode Stripe
+authorization against a card's own spend limit, not charging an arbitrary
+live merchant. See `docs/CARDS.md` for the full setup, data model,
+PCI-scope reasoning, the MCP tool list, and deployment/subdomain
+instructions.
 
 ## Service branches (one repo, one DB, per-service subdomain)
 

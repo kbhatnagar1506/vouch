@@ -371,3 +371,58 @@ export async function recordCardTransaction(params: {
   }
   return { autoCanceled: false };
 }
+
+export interface SimulatePurchaseInput {
+  cardId: string;
+  amountCents: number;
+  merchantName?: string;
+}
+
+export interface SimulatePurchaseResult {
+  approved: boolean;
+  authorizationId: string;
+  /** Populated only when declined -- e.g. "spending_controls", "card_canceled". See Stripe's Issuing.Authorization.RequestHistory.Reason. */
+  declineReason?: string;
+}
+
+/**
+ * Test-mode only (this whole branch is sandbox -- see docs/CARDS.md). Drives
+ * a real Stripe Issuing authorization against the card's actual
+ * `spending_controls`, exactly as a live merchant charge would: Stripe
+ * itself decides approve/decline, not application code. An approved
+ * authorization is immediately captured, which produces a real
+ * `issuing_transaction.created` event -- the existing webhook handler
+ * (app/api/stripe/webhook/route.ts) picks it up and records it via
+ * recordCardTransaction() above exactly as it would for any other
+ * transaction, single-use auto-cancel included. This function does not
+ * duplicate that recording itself; it only drives Stripe's side and
+ * reports the immediate authorization decision.
+ */
+export async function simulatePurchase(userId: string, input: SimulatePurchaseInput): Promise<SimulatePurchaseResult> {
+  const existing = await pool.query<{ stripe_card_id: string }>(
+    "select stripe_card_id from issued_cards where id = $1 and user_id = $2",
+    [input.cardId, userId],
+  );
+  if (existing.rows.length === 0) {
+    throw new Error("Card not found");
+  }
+  const stripeCardId = existing.rows[0].stripe_card_id;
+
+  const stripe = getStripeClient();
+  const authorization = await stripe.testHelpers.issuing.authorizations.create({
+    card: stripeCardId,
+    amount: input.amountCents,
+    merchant_data: input.merchantName ? { name: input.merchantName } : undefined,
+  });
+
+  if (!authorization.approved) {
+    return {
+      approved: false,
+      authorizationId: authorization.id,
+      declineReason: authorization.request_history[authorization.request_history.length - 1]?.reason,
+    };
+  }
+
+  await stripe.testHelpers.issuing.authorizations.capture(authorization.id);
+  return { approved: true, authorizationId: authorization.id };
+}

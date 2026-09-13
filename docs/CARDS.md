@@ -151,6 +151,8 @@ creation failed` errors until they cleared:
 - `card_transactions` — a local read model of posted spend per card,
   populated from the webhook so the UI doesn't need a live Stripe API
   call just to show history.
+- `mcp_api_keys` — bearer tokens for the MCP server (see "MCP server"
+  below); only a SHA-256 hash is ever stored, never the raw token.
 
 `issued_cards`/`card_transactions` don't carry a hard foreign key to
 gmail-connector's `gmail_messages` / `gmail_message_classifications` even
@@ -160,6 +162,76 @@ without depending on another service branch's migrations having run
 first. A UI that suggests "issue a card for this detected subscription"
 can still join across at the application level once both services are
 deployed together; it just isn't a schema-level dependency.
+
+## MCP server (Claude, OpenAI agents, …)
+
+`app/api/mcp` exposes the card lifecycle above as an
+[MCP](https://modelcontextprotocol.io) server (`@modelcontextprotocol/sdk`,
+Streamable HTTP transport) — any MCP-speaking client works against it,
+Claude or OpenAI-based agents alike; MCP is a protocol, not a
+vendor-specific integration, so this is one server, not two.
+
+**Tools**: `create_temporary_card`, `list_cards`, `freeze_card`,
+`unfreeze_card`, `cancel_card`, `simulate_purchase`
+(`lib/mcp/server.ts`) — thin wrappers over the exact same `lib/stripe.ts`
+functions the human-facing `/cards` UI calls. Same PCI guarantee both
+places: **no tool ever returns the card number or CVC**, only what
+Stripe's own card object already treats as non-sensitive (last4, brand,
+expiry, status).
+
+**`simulate_purchase`** is how an agent actually "spends" from a card: it
+drives a real Stripe test-mode Issuing authorization against that card's
+own `spending_controls` — Stripe itself approves or declines, not
+application code — and captures it immediately if approved, which
+produces a genuine `issuing_transaction.created` event that the existing
+webhook handler picks up exactly as it would for any other transaction
+(recording it, auto-canceling a single-use card). **This is not a general
+"buy anything from any online merchant" capability** — Stripe Issuing
+authorizations are pull-based (a merchant/terminal charges the card; you
+can't push a purchase to an arbitrary live merchant via API), and this
+whole branch runs in Stripe test mode besides. What it *does* give an
+agent: create a scoped, disposable card for an intended purchase, and get
+a real, correctly-enforced approve/decline answer against its spend limit
+— the actual point of "can an agent purchase things" for this integration.
+Bridging to a real arbitrary live checkout is a separate, larger problem
+(browser/checkout automation, or a specific merchant's own payments API),
+deliberately not attempted here.
+
+### Auth: bearer API keys, not the session cookie
+
+MCP clients aren't browsers — they can't carry `vouch_session`, which is
+how every other route here identifies a user. So `/api/mcp` sits
+deliberately outside `middleware.ts`'s cookie-based protection
+(`app/api/mcp/route.ts` isn't in its matcher at all) and authenticates
+every request itself via `Authorization: Bearer <token>`.
+
+1. From a signed-in browser session, `POST /api/mcp/keys` (optionally
+   `{ "label": "..." }`) mints a new key and returns `{ id, token }` — the
+   raw token is shown **exactly once**; only its SHA-256 hash is stored
+   (`mcp_api_keys`, `lib/mcp/api-keys.ts`). `GET /api/mcp/keys` lists keys
+   (label, timestamps — never the token again);
+   `POST /api/mcp/keys/:id/revoke` revokes one.
+2. Configure the MCP client (Claude, an OpenAI Agents SDK integration,
+   etc.) with that token as its bearer credential against
+   `https://cards.getvouch.club/api/mcp`.
+3. Every tool call after that runs as the user that key belongs to —
+   `create_temporary_card` issues cards under their Stripe cardholder,
+   `list_cards` only ever sees their own cards, etc.
+
+**Known gap**: this is a static, self-service bearer key, not a full
+OAuth 2.1 authorization flow. That's the spec-preferred way for a client
+like Claude.ai or ChatGPT to offer "connect your Vouch account" as a
+one-click flow directly in their own UI, and is a reasonable next step —
+just substantially more scope (an authorization server: dynamic client
+registration, consent screen, token exchange) than a first pass needed.
+The bearer-key model is secure and standard for developer-facing
+integrations in the meantime (mint it once, paste it into whatever MCP
+client config); it just isn't a point-and-click connect flow yet.
+
+**Also not yet built**: any rate limiting on `/api/mcp` — a compromised or
+overly-eager agent could mint cards or attempt authorizations in a tight
+loop. Worth a per-key cap before this is handed to a real, untrusted
+integration rather than a single developer's own client.
 
 ## Multi-tenancy
 

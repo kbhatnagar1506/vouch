@@ -10,13 +10,15 @@
     "db:migrate": "node --env-file=.env scripts/migrate.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@stripe/stripe-js": "5.5.0",
+    "jose": "6.2.12",
     "next": "15.5.25",
+    "pg": "8.13.1",
     "react": "19.1.1",
     "react-dom": "19.1.1",
-    "pg": "8.13.1",
-    "jose": "6.2.12",
     "stripe": "17.5.0",
-    "@stripe/stripe-js": "5.5.0"
+    "zod": "4.6.4"
   },
   "devDependencies": {
     "@types/node": "22.10.5",
