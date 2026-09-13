@@ -90,7 +90,7 @@ export function intakeSchema(fields: IntakeField[]): Vapi.JsonSchema {
 // name" — asked to "introduce yourself by name" with no actual name given,
 // it treated "agent name" as the value to fill in. Giving the persona a
 // real fixed name fixes both that and the first message below.
-const AGENT_NAME = "Alex";
+const AGENT_NAME = "Hale";
 
 // Spoken immediately on connect (firstMessageMode: "assistant-speaks-first"
 // below) rather than left for the model to generate on its first turn —
