@@ -42,6 +42,7 @@ export default function DashboardShell({
   const [phoneNumber, setPhoneNumber] = useState("");
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ action: "renew" | "cancel"; name: string } | null>(null);
 
   const openSub = subscriptions.find((s) => s.id === openSubId) ?? null;
 
@@ -57,16 +58,25 @@ export default function DashboardShell({
     setResolveError(null);
   }
 
-  async function resolve(id: string, action: "renew" | "cancel") {
-    if (mode === "demo") {
-      // Mirrors vouch-ui's original stub — these are seeded subscriptions,
-      // nothing real to mint or cancel.
+  function celebrate(action: "renew" | "cancel", name: string) {
+    setSuccess({ action, name });
+    setTimeout(() => {
+      setSuccess(null);
       closePopup();
-      return;
-    }
+    }, 1300);
+  }
 
+  async function resolve(id: string, action: "renew" | "cancel") {
     const sub = subscriptions.find((s) => s.id === id);
     if (!sub) return;
+
+    if (mode === "demo") {
+      // Mirrors vouch-ui's original stub — these are seeded subscriptions,
+      // nothing real to mint or cancel — but still worth celebrating so the
+      // demo shows the same moment the real flow does.
+      celebrate(action, sub.name);
+      return;
+    }
 
     setResolving(true);
     setResolveError(null);
@@ -94,7 +104,7 @@ export default function DashboardShell({
         const patch = data.subscription;
         setSubscriptions((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
       }
-      closePopup();
+      celebrate(action, sub.name);
     } catch (err) {
       setResolveError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -109,15 +119,27 @@ export default function DashboardShell({
 
   return (
     <div className="app">
-      <Sidebar page={page} setPage={setPage} onOpen={openPopup} subscriptions={subscriptions} user={user} onLogout={mode === "real" ? onLogout : undefined} />
+      <Sidebar
+        page={page}
+        setPage={setPage}
+        onOpen={openPopup}
+        subscriptions={subscriptions}
+        user={user}
+        onLogout={mode === "real" ? onLogout : undefined}
+        mode={mode}
+        phoneNumber={phoneNumber}
+        onPhoneChange={setPhoneNumber}
+      />
       <main className="main">
-        {page === "overview" && <Overview subscriptions={subscriptions} budget={budget} onOpen={openPopup} />}
-        {page === "cards" && <Cards subscriptions={subscriptions} onOpen={openPopup} />}
-        {page === "budget" && <Budget budget={budget} mode={mode} />}
-        {page === "analysis" && <Analysis subscriptions={subscriptions} mode={mode} />}
-        {page === "transactions" && <Transactions transactions={transactions} mode={mode} />}
-        {page === "connectors" && <Connectors connectors={connectors} />}
-        {page === "settings" && <Settings user={user} mode={mode} />}
+        <div key={page} className="page-transition">
+          {page === "overview" && <Overview subscriptions={subscriptions} budget={budget} onOpen={openPopup} />}
+          {page === "cards" && <Cards subscriptions={subscriptions} onOpen={openPopup} />}
+          {page === "budget" && <Budget budget={budget} mode={mode} />}
+          {page === "analysis" && <Analysis subscriptions={subscriptions} mode={mode} />}
+          {page === "transactions" && <Transactions transactions={transactions} mode={mode} />}
+          {page === "connectors" && <Connectors connectors={connectors} />}
+          {page === "settings" && <Settings user={user} mode={mode} />}
+        </div>
       </main>
 
       <CardPopup
@@ -130,6 +152,7 @@ export default function DashboardShell({
         onPhoneChange={setPhoneNumber}
         resolving={resolving}
         resolveError={resolveError}
+        success={success}
       />
     </div>
   );

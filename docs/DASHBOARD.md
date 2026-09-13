@@ -69,6 +69,40 @@ first-ever mint still needs a phone number (Stripe requirement for 3D
 Secure); the popup collects it inline, same UX as card-issuing's card
 manager.
 
+## Call me (Vapi)
+
+The Sidebar's "Call me" button places a real outbound call via
+[Vapi](https://vapi.ai) that reads out whatever currently needs a decision
+(the same `reason` text already shown in each subscription's popup) —
+the thing the popup's own voice-hint line already promises. Needs
+`VAPI_API_KEY`, `VAPI_ASSISTANT_ID`, `VAPI_PHONE_NUMBER_ID` (see
+`.env.example`); `app/api/dashboard/call-me/route.ts` returns a clear
+501 "not configured" error until those exist, rather than crashing —
+same treatment card-issuing got before its Stripe keys existed. The
+request shape (`assistantOverrides.variableValues` carrying the summary
+into the assistant's prompt) matches Vapi's documented Call Create API
+but hasn't been exercised against a real account yet — verify once real
+credentials are wired, same as `docs/CARDS.md`'s empirically-discovered
+Stripe quirks.
+
+In `/demo`, the button runs the same UI flow (asks for a number if it
+doesn't have one, shows "Calling…" then "Calling you now") without ever
+reaching the network — there's no real user to call.
+
+## UI polish
+
+- **Page transitions**: switching sidebar tabs re-mounts the page content
+  under a `key`, replaying a short fade/slide-in (`.page-transition` in
+  `app/globals.css`). Respects `prefers-reduced-motion`.
+- **Loading skeleton**: `app/dashboard/loading.tsx` is Next.js's automatic
+  Suspense fallback for `/dashboard`'s async data fetch — no client JS,
+  shown for however long `getRealDashboardData` takes, laid out to match
+  the real shell so nothing shifts when it swaps in.
+- **Mint/cancel success state**: `CardPopup` swaps its body for a brief
+  checkmark + confirmation (`.popup-success`) before auto-closing, in both
+  modes — demo included, since there's nothing to actually mint/cancel
+  there but the moment is still worth showing off.
+
 ## Fixed while building this: missing `users.name` column
 
 `card-issuing/lib/auth.ts` (and this branch's copy) select `name` from

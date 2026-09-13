@@ -1,6 +1,7 @@
 import { LayoutGrid, CreditCard, Wallet, Receipt, Plug, Settings, LineChart, LogOut } from "lucide-react";
 import Logo from "./Logo";
 import BrandLogo from "./BrandLogo";
+import CallMeButton from "./CallMeButton";
 import type { AnalyzedSubscription, DashboardUser } from "@/lib/dashboard-types";
 import type { PageId } from "./DashboardShell";
 
@@ -21,6 +22,9 @@ export default function Sidebar({
   subscriptions,
   user,
   onLogout,
+  mode,
+  phoneNumber,
+  onPhoneChange,
 }: {
   page: PageId;
   setPage: (p: PageId) => void;
@@ -28,6 +32,9 @@ export default function Sidebar({
   subscriptions: AnalyzedSubscription[];
   user: DashboardUser;
   onLogout?: () => void;
+  mode: "demo" | "real";
+  phoneNumber: string;
+  onPhoneChange: (v: string) => void;
 }) {
   const activeCards = subscriptions.filter((s) => s.card !== "closed").length;
 
@@ -59,6 +66,8 @@ export default function Sidebar({
           ))}
         </div>
       </nav>
+
+      <CallMeButton mode={mode} subscriptions={subscriptions} phoneNumber={phoneNumber} onPhoneChange={onPhoneChange} />
 
       <div className="nav-user">
         <div className="avatar">{user.initials}</div>

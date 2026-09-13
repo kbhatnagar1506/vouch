@@ -1,8 +1,13 @@
-import { X, Mic, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2 } from "lucide-react";
+import { X, Mic, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Check, Ban } from "lucide-react";
 import Logo from "./Logo";
 import type { AnalyzedSubscription } from "@/lib/dashboard-types";
 
 const verdictLabel: Record<string, string> = { renew: "Renew", hold: "Hold", cancel: "Cancel", ask: "Your call" };
+
+interface SuccessState {
+  action: "renew" | "cancel";
+  name: string;
+}
 
 export default function CardPopup({
   sub,
@@ -14,6 +19,7 @@ export default function CardPopup({
   onPhoneChange,
   resolving,
   resolveError,
+  success,
 }: {
   sub: AnalyzedSubscription | null;
   onClose: () => void;
@@ -24,6 +30,7 @@ export default function CardPopup({
   onPhoneChange: (v: string) => void;
   resolving: boolean;
   resolveError: string | null;
+  success: SuccessState | null;
 }) {
   if (!sub) return null;
   const dead = sub.card === "closed";
@@ -63,80 +70,92 @@ export default function CardPopup({
           </div>
         </div>
 
-        <div className="popup-body">
-          <div className="popup-verdict">
-            <span className={`dot ${sub.status === "ask" ? "hold" : sub.status}`} />
-            <h3>{verdictLabel[sub.status]}</h3>
-            <span className={`chip ${sub.status}`} style={{ marginLeft: "auto" }}>
-              {sub.name} · ${sub.price.toFixed(2)}/{sub.cycle === "monthly" ? "mo" : "yr"}
-            </span>
+        {success ? (
+          <div className={`popup-success ${success.action === "cancel" ? "dead" : ""}`}>
+            <div className="popup-success-icon">{success.action === "renew" ? <Check size={26} /> : <Ban size={24} />}</div>
+            <h3>{success.action === "renew" ? "Card minted" : "Kept it dead"}</h3>
+            <p>
+              {success.action === "renew"
+                ? `A fresh single-use card is active for ${success.name}'s next charge.`
+                : `${success.name} won't be charged on this card again.`}
+            </p>
           </div>
+        ) : (
+          <div className="popup-body">
+            <div className="popup-verdict">
+              <span className={`dot ${sub.status === "ask" ? "hold" : sub.status}`} />
+              <h3>{verdictLabel[sub.status]}</h3>
+              <span className={`chip ${sub.status}`} style={{ marginLeft: "auto" }}>
+                {sub.name} · ${sub.price.toFixed(2)}/{sub.cycle === "monthly" ? "mo" : "yr"}
+              </span>
+            </div>
 
-          <p className="popup-reason">{sub.reason}</p>
+            <p className="popup-reason">{sub.reason}</p>
 
-          <div className="popup-evidence">
-            {sub.usage30 !== undefined && (
+            <div className="popup-evidence">
+              {sub.usage30 !== undefined && (
+                <div className="evidence-row">
+                  <span className="k">Usage · last 30 days</span>
+                  <span className="v">
+                    {sub.usage30} {sub.usageUnit}
+                  </span>
+                </div>
+              )}
+              {sub.trend && (
+                <div className="evidence-row">
+                  <span className="k">Trend</span>
+                  <span className={`v ${sub.trend === "up" ? "up" : sub.trend === "down" ? "down" : ""}`}>
+                    <TrendIcon size={13} style={{ verticalAlign: "-2px", marginRight: 4 }} />
+                    {sub.trend}
+                  </span>
+                </div>
+              )}
               <div className="evidence-row">
-                <span className="k">Usage · last 30 days</span>
-                <span className="v">
-                  {sub.usage30} {sub.usageUnit}
-                </span>
+                <span className="k">Price vs last charge</span>
+                <span className={`v ${sub.priceChange ? "down" : ""}`}>{sub.priceChange ? `+${sub.priceChange}%` : "unchanged"}</span>
+              </div>
+              {sub.overlap && (
+                <div className="evidence-row">
+                  <span className="k">Overlap</span>
+                  <span className="v down">also paying for {sub.overlap}</span>
+                </div>
+              )}
+              <div className="evidence-row">
+                <span className="k">Renews in</span>
+                <span className="v">{sub.renewsIn === null ? "unknown" : `${sub.renewsIn} day${sub.renewsIn === 1 ? "" : "s"}`}</span>
+              </div>
+            </div>
+
+            {mode === "real" && needsPhone && (
+              <div className="popup-phone">
+                <label htmlFor="popup-phone-input">Phone number (required once, for Stripe 3D Secure)</label>
+                <input
+                  id="popup-phone-input"
+                  type="tel"
+                  placeholder="+1 555 555 5555"
+                  value={phoneNumber}
+                  onChange={(e) => onPhoneChange(e.target.value)}
+                />
+                <p className="popup-phone-note">Used only to set up card issuance. Continuing counts as accepting Stripe's cardholder terms.</p>
               </div>
             )}
-            {sub.trend && (
-              <div className="evidence-row">
-                <span className="k">Trend</span>
-                <span className={`v ${sub.trend === "up" ? "up" : sub.trend === "down" ? "down" : ""}`}>
-                  <TrendIcon size={13} style={{ verticalAlign: "-2px", marginRight: 4 }} />
-                  {sub.trend}
-                </span>
-              </div>
-            )}
-            <div className="evidence-row">
-              <span className="k">Price vs last charge</span>
-              <span className={`v ${sub.priceChange ? "down" : ""}`}>{sub.priceChange ? `+${sub.priceChange}%` : "unchanged"}</span>
+
+            {resolveError && <p className="popup-error">{resolveError}</p>}
+
+            <div className="popup-actions">
+              <button className="btn btn-renew" disabled={resolving} onClick={() => onResolve(sub.id, "renew")}>
+                {resolving ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} Mint card & renew
+              </button>
+              <button className="btn btn-cancel" disabled={resolving} onClick={() => onResolve(sub.id, "cancel")}>
+                Keep it dead
+              </button>
             </div>
-            {sub.overlap && (
-              <div className="evidence-row">
-                <span className="k">Overlap</span>
-                <span className="v down">also paying for {sub.overlap}</span>
-              </div>
-            )}
-            <div className="evidence-row">
-              <span className="k">Renews in</span>
-              <span className="v">{sub.renewsIn === null ? "unknown" : `${sub.renewsIn} day${sub.renewsIn === 1 ? "" : "s"}`}</span>
+
+            <div className="voice-hint">
+              <Mic size={14} /> Vouch can ask you this out loud — answer &ldquo;renew&rdquo; or &ldquo;cancel.&rdquo;
             </div>
           </div>
-
-          {mode === "real" && needsPhone && (
-            <div className="popup-phone">
-              <label htmlFor="popup-phone-input">Phone number (required once, for Stripe 3D Secure)</label>
-              <input
-                id="popup-phone-input"
-                type="tel"
-                placeholder="+1 555 555 5555"
-                value={phoneNumber}
-                onChange={(e) => onPhoneChange(e.target.value)}
-              />
-              <p className="popup-phone-note">Used only to set up card issuance. Continuing counts as accepting Stripe's cardholder terms.</p>
-            </div>
-          )}
-
-          {resolveError && <p className="popup-error">{resolveError}</p>}
-
-          <div className="popup-actions">
-            <button className="btn btn-renew" disabled={resolving} onClick={() => onResolve(sub.id, "renew")}>
-              {resolving ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} Mint card & renew
-            </button>
-            <button className="btn btn-cancel" disabled={resolving} onClick={() => onResolve(sub.id, "cancel")}>
-              Keep it dead
-            </button>
-          </div>
-
-          <div className="voice-hint">
-            <Mic size={14} /> Vouch can ask you this out loud — answer &ldquo;renew&rdquo; or &ldquo;cancel.&rdquo;
-          </div>
-        </div>
+        )}
 
         <button onClick={onClose} style={{ position: "absolute", top: 18, right: 18, color: "#fff", opacity: 0.85 }} aria-label="Close">
           <X size={20} />
