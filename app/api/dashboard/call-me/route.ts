@@ -1,33 +1,32 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getCurrentUser } from "@/lib/session";
-
-const VAPI_CALL_URL = "https://api.vapi.ai/call";
+import { SESSION_COOKIE } from "@/lib/auth";
 
 /**
- * Places a real outbound call via Vapi so Vouch can read out pending
- * decisions out loud — the thing the CardPopup's voice-hint already
- * promises ("Vouch can ask you this out loud"). Needs VAPI_API_KEY,
- * VAPI_ASSISTANT_ID and VAPI_PHONE_NUMBER_ID (see .env.example); until
- * those are set this returns a clear "not configured" error instead of
- * crashing, same treatment as card-issuing before its Stripe keys existed.
+ * Backs the Sidebar's "Call me" button. Proxies to the `calling-agent`
+ * branch's own service (POST /api/calling-agent/calls) rather than talking
+ * to Vapi directly — that branch owns the actual assistant, the Vapi/
+ * ElevenLabs integration, and the call-history DB table, per this repo's
+ * "one service, one branch" convention (see root CLAUDE.md). This route's
+ * only job is a server-to-server forward: it re-sends the caller's own
+ * session cookie so calling-agent's `requireUser()` resolves the same user
+ * (both services verify the same JWT_SECRET, so this needs no separate
+ * auth of its own), maps our subscription-decision context onto
+ * calling-agent's `purchase_verification` preset, and translates its
+ * response into what CallMeButton expects.
  *
- * The exact request shape (assistantOverrides.variableValues for passing
- * the "what needs you" summary into the assistant's prompt) matches
- * Vapi's public Call Create API as documented, but hasn't been exercised
- * against a real account yet -- verify once real credentials are wired,
- * same as docs/CARDS.md's empirically-discovered Stripe quirks.
+ * Needs CALLING_AGENT_URL (see .env.example). Until it's set, this returns
+ * a clear "not configured" error instead of crashing — same treatment
+ * card-issuing got before its Stripe keys existed.
  */
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) {
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  if (!token) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const apiKey = process.env.VAPI_API_KEY;
-  const assistantId = process.env.VAPI_ASSISTANT_ID;
-  const phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID;
-  if (!apiKey || !assistantId || !phoneNumberId) {
-    return NextResponse.json({ error: "Voice calling isn't configured yet — see .env.example (VAPI_*)." }, { status: 501 });
+  const callingAgentUrl = process.env.CALLING_AGENT_URL;
+  if (!callingAgentUrl) {
+    return NextResponse.json({ error: "Voice calling isn't configured yet — see .env.example (CALLING_AGENT_URL)." }, { status: 501 });
   }
 
   const body = await req.json().catch(() => null);
@@ -38,26 +37,31 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const vapiRes = await fetch(VAPI_CALL_URL, {
+    const res = await fetch(`${callingAgentUrl}/api/calling-agent/calls`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // Server-to-server: calling-agent verifies this JWT itself against
+        // the same JWT_SECRET, so no browser cookie header is involved.
+        Cookie: `${SESSION_COOKIE}=${token}`,
+      },
       body: JSON.stringify({
-        assistantId,
-        phoneNumberId,
-        customer: { number: phoneNumber, name: user.name || user.email },
-        assistantOverrides: {
-          variableValues: { context, userName: user.name || user.email.split("@")[0] },
-        },
+        toNumber: phoneNumber,
+        // Literal value of calling-agent's PURCHASE_VERIFICATION_PURPOSE
+        // (lib/calling-agent/assistant.ts on that branch) — can't import
+        // it across branches, so it's pinned here as a string.
+        purpose: "purchase_verification",
+        context,
       }),
     });
 
-    const data = await vapiRes.json().catch(() => ({}));
-    if (!vapiRes.ok) {
-      return NextResponse.json({ error: data?.message || "Vapi couldn't place the call." }, { status: 502 });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return NextResponse.json({ error: data?.error || "The calling agent couldn't place the call." }, { status: res.status === 401 ? 401 : 502 });
     }
-    return NextResponse.json({ ok: true, callId: data?.id ?? null });
+    return NextResponse.json({ ok: true, callId: data?.call?.vapiCallId ?? null });
   } catch (error) {
     console.error("dashboard/call-me failed:", error);
-    return NextResponse.json({ error: "Failed to reach Vapi." }, { status: 502 });
+    return NextResponse.json({ error: "Failed to reach the calling agent." }, { status: 502 });
   }
 }

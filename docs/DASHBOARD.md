@@ -69,21 +69,31 @@ first-ever mint still needs a phone number (Stripe requirement for 3D
 Secure); the popup collects it inline, same UX as card-issuing's card
 manager.
 
-## Call me (Vapi)
+## Call me (proxies to the `calling-agent` branch)
 
-The Sidebar's "Call me" button places a real outbound call via
-[Vapi](https://vapi.ai) that reads out whatever currently needs a decision
-(the same `reason` text already shown in each subscription's popup) —
-the thing the popup's own voice-hint line already promises. Needs
-`VAPI_API_KEY`, `VAPI_ASSISTANT_ID`, `VAPI_PHONE_NUMBER_ID` (see
-`.env.example`); `app/api/dashboard/call-me/route.ts` returns a clear
-501 "not configured" error until those exist, rather than crashing —
-same treatment card-issuing got before its Stripe keys existed. The
-request shape (`assistantOverrides.variableValues` carrying the summary
-into the assistant's prompt) matches Vapi's documented Call Create API
-but hasn't been exercised against a real account yet — verify once real
-credentials are wired, same as `docs/CARDS.md`'s empirically-discovered
-Stripe quirks.
+The Sidebar's "Call me" button places a real outbound call that reads out
+whatever currently needs a decision — the thing the popup's own
+voice-hint line already promises. This branch does **not** talk to Vapi
+directly: `app/api/dashboard/call-me/route.ts` forwards the request to
+the `calling-agent` branch's own deployment (`POST
+/api/calling-agent/calls`), which owns the actual Vapi/ElevenLabs
+integration, the assistant, and call history — see that branch's
+`docs/CALLING_AGENT.md`. This keeps with the "one service, one branch"
+convention: card issuance lives on `card-issuing`, calling lives on
+`calling-agent`, and `dashboard` is a thin client to both.
+
+The forward re-sends the caller's own session cookie as a header on the
+server-to-server request — both branches verify the same `JWT_SECRET`,
+so `calling-agent`'s `requireUser()` resolves the identical user without
+any separate auth between the two services. The call is placed with
+`purpose: "purchase_verification"` (calling-agent's preset for "confirm
+this transaction with the cardholder"), passing the subscriptions
+currently needing a decision as free-text `context`.
+
+Needs `CALLING_AGENT_URL` (see `.env.example`) pointing at that branch's
+deployment. Until it's set, this returns a clear 501 "not configured"
+error rather than crashing — same treatment card-issuing got before its
+Stripe keys existed.
 
 In `/demo`, the button runs the same UI flow (asks for a number if it
 doesn't have one, shows "Calling…" then "Calling you now") without ever
