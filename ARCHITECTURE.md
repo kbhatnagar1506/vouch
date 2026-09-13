@@ -11,6 +11,22 @@ The organising idea of the codebase: **the agent spends real money, so every
 input to that decision has to be real too.** Most of what follows is about
 closing the gap between "the user typed this" and "we verified this."
 
+> **This branch carries a full documentation pass across every branch.**
+> Normally each service branch only carries its own `docs/*.md` — that's
+> still true; nothing below changes what lives on `portal`, `gmail-connector`,
+> etc. What's new here is a `docs/` tree that reads *every* branch's actual
+> code (not just its docs) and consolidates it in one place no single
+> branch's checkout has: a deep-dive per service
+> ([`docs/services/`](./docs/services/)), plus four cross-cutting references —
+> [`docs/DATABASE.md`](./docs/DATABASE.md) (every migration, verbatim, from
+> every branch), [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) (Vercel +
+> GCP infra), [`docs/ENVIRONMENT.md`](./docs/ENVIRONMENT.md) (every env var,
+> including which ones must be byte-identical across branches), and
+> [`docs/BRANCHES.md`](./docs/BRANCHES.md) (the git branching model and
+> where it's drifted). Where that pass turned up something this file
+> asserts more confidently than the code actually supports, there's a
+> pointer to the fuller account inline below rather than a silent edit.
+
 ---
 
 ## 1. The shape of the system
@@ -60,7 +76,11 @@ Identity verification is deliberately **not** in that chain — see §6.
 **Data:**
 
 - **Postgres 18** on **GCP Cloud SQL** (instance `vouch-db`, `us-central1`),
-  with **pgvector** for embeddings
+  with **pgvector** for embeddings. *(Best-supported answer, not a settled
+  one: branches' own `.env.example` files split three ways — Tiger
+  Cloud/Timescale, GCP Cloud SQL, and an unfilled placeholder — and Vercel
+  secrets can't be read back to check which is actually live on each
+  deployment. Full account in [`docs/DATABASE.md` §6](./docs/DATABASE.md#6-which-database-is-this-actually).)*
 
 **Third-party services:**
 
@@ -156,7 +176,10 @@ The extracted result is a typed JSON object (`{confirmed, concern_reason}`),
 produced by Vapi's structured-data plan from the transcript.
 
 **Verified working end to end** — a real call was placed, held a natural
-conversation, and returned `{"confirmed": true}`.
+conversation, and returned `{"confirmed": true}`. *(Corroborated by commit
+messages, not by a committed transcript/log artifact — see
+[`docs/services/calling-agent.md` §10](./docs/services/calling-agent.md)
+for the audit trail behind this claim.)*
 
 ---
 
@@ -172,10 +195,22 @@ was **self-attested**:
   voice defeats the speaker-match as well, since that only proves the caller
   is whoever enrolled, not who that is.
 
-Persona closes both. But it is **not** a fifth onboarding step — it triggers
-at **first card mint**, the moment the agent is about to spend, where the
-reason for asking is concrete. Anyone who just wants to look around reaches
-the dashboard exactly as fast as before.
+Persona closes both. But it is **not** a fifth onboarding step — it's
+*designed* to trigger at **first card mint**, the moment the agent is
+about to spend, where the reason for asking is concrete. Anyone who just
+wants to look around reaches the dashboard exactly as fast as before.
+
+**That trigger is not wired up yet.** `card-issuing` — the branch that
+would need to check verification status before minting — has zero
+references to identity, Persona, or any verification-tier concept
+anywhere in its code, confirmed directly against `origin/card-issuing`.
+`identity-verification`'s own `docs/IDENTITY.md` names this as a "still to
+do" item. The rest of this section describes the intended design and what
+*is* actually built toward it (the schema, the voice-binding write path,
+both confirmed for real below) — not a claim that unverified users are
+currently blocked from spending. See
+[`docs/services/identity-verification.md` §11](./docs/services/identity-verification.md)
+for the full design-intent-vs-implemented-reality breakdown.
 
 ```
 unverified  → agent may OBSERVE : read Gmail, surface subscriptions
@@ -231,19 +266,26 @@ schema rather than forking the connection.
 
 | Owner | Tables |
 |---|---|
-| `portal` | `users`, `user_profiles` |
+| `portal` *(created first by `bank-connection`'s `0002_users.sql`; `portal` recreates it defensively and owns the write path — see `docs/DATABASE.md` §4)* | `users`, `user_profiles` |
 | `gmail-connector` | `gmail_connections`, `gmail_messages`, `gmail_message_chunks`, `gmail_message_classifications`, `spending_categories`, `memories`, `memory_chunks`, `memory_relations`, `memory_versions`, `backboard_assistants` |
-| `bank-connection` | `plaid_items`, `plaid_accounts` |
-| `card-issuing` | `stripe_cardholders`, `issued_cards`, `card_transactions` |
+| `bank-connection` | `plaid_items`, `plaid_accounts`, `plaid_transactions`, `plaid_sync_runs` |
+| `card-issuing` | `stripe_cardholders`, `issued_cards`, `card_transactions`, `mcp_api_keys` |
 | `voice-verification` | `voice_enrollments`, `voice_verifications` |
 | `calling-agent` | `calling_agent_calls`, `calling_agent_events` |
-| `identity-verification` | `identity_verifications`, `identity_verification_events` |
+| `identity-verification` | `identity_verifications`, `identity_verification_events` (+ alters `voice_enrollments`, which it doesn't own — the voice-binding write path, confirmed implemented in `docs/services/identity-verification.md` §6) |
 
 Sensitive values are encrypted at rest with AES-256-GCM (`lib/crypto.ts`):
-voice embeddings (biometric data) and Plaid access tokens.
+voice embeddings (biometric data), Plaid access tokens, and Gmail OAuth
+tokens.
 
-Migrations are plain SQL under `db/migrations/`, applied via
-`npm run db:migrate`.
+Migrations are plain SQL under `db/migrations/` (`portal` alone uses
+`migrations/` at its root instead), applied via `npm run db:migrate`, and
+tracked in a single `_migrations` table **shared across every branch** on
+the same database. Full verbatim schema, and three cross-branch
+inconsistencies worth knowing about before touching this schema again (two
+independent creations of `users`, `users.name` added independently by
+three different branches, and the one deliberate cross-branch `ALTER
+TABLE` above), are in [`docs/DATABASE.md`](./docs/DATABASE.md).
 
 ---
 
@@ -263,7 +305,11 @@ Migrations are plain SQL under `db/migrations/`, applied via
 
 ---
 
-## 10. Per-service documentation
+## 10. Documentation map
+
+Each service branch carries its own `docs/*.md`, written from inside that
+branch and scoped to it — those stay the live, close-to-the-code reference
+for anyone working on that branch directly:
 
 | Doc | Branch |
 |---|---|
@@ -274,4 +320,29 @@ Migrations are plain SQL under `db/migrations/`, applied via
 | `docs/CALLING_AGENT.md` | `calling-agent` |
 | `docs/DASHBOARD.md` | `dashboard` |
 | `docs/IDENTITY.md` | `identity-verification` |
-| `CLAUDE.md` | this branch — the branch/subdomain convention |
+| `CLAUDE.md` | every branch — the branch/subdomain convention (identical root content, plus a branch-specific section on `portal`) |
+
+**This branch additionally carries a full cross-branch pass** — every
+branch's code read directly (not just its docs) and consolidated
+somewhere no single branch's checkout has it:
+
+| Doc | Covers |
+|---|---|
+| [`docs/services/portal.md`](./docs/services/portal.md) | `portal` deep-dive: session issuance, the `src/` layout's origin, every route |
+| [`docs/services/gmail-connector.md`](./docs/services/gmail-connector.md) | OAuth flow, sync pipeline, the memory subsystem, all 13 migrations |
+| [`docs/services/bank-connection.md`](./docs/services/bank-connection.md) | Plaid integration, webhook security, the Vercel domain-binding gap |
+| [`docs/services/voice-verification.md`](./docs/services/voice-verification.md) | The Next.js app **and** the separate `voice-inference` Cloud Run service |
+| [`docs/services/identity-verification.md`](./docs/services/identity-verification.md) | Persona integration, data minimization verified column-by-column, the voice-binding write path |
+| [`docs/services/card-issuing.md`](./docs/services/card-issuing.md) | Stripe Issuing, PCI scope, the MCP server exposing card issuance to agents |
+| [`docs/services/calling-agent.md`](./docs/services/calling-agent.md) | The full call pipeline, structured-output extraction, the Hale/George voice history |
+| [`docs/services/dashboard.md`](./docs/services/dashboard.md) | The decision engine's exact rules, cross-branch SQL access, the real-vs-demo split |
+| [`docs/DATABASE.md`](./docs/DATABASE.md) | Every migration from every branch, verbatim, plus cross-branch schema touches |
+| [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) | Vercel project/domains/protection, GCP Cloud SQL & Cloud Run |
+| [`docs/ENVIRONMENT.md`](./docs/ENVIRONMENT.md) | Every env var, branch by branch, and which ones must match exactly |
+| [`docs/BRANCHES.md`](./docs/BRANCHES.md) | Fork points, drift in "copied" files, the `portal`/`gmail-connector` porting history |
+
+Where a doc above disagrees with a branch's own `docs/*.md`, the
+disagreement is called out explicitly inside it (usually because the
+cross-branch pass could check something — like another branch's actual
+code, or a shared table's real column list — that the original doc's
+author, working from inside just that one branch, had no way to verify).
