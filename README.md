@@ -1,11 +1,19 @@
 # Vouch
 
-**Subscriptions can't charge you if the card is already dead.**
+**Temporary cards for AI agents.**
 
-Vouch issues a fresh single-use virtual card for every subscription payment.
-The moment one transaction posts, the card cancels itself — so the merchant's
-next renewal attempt is declined at the network, with no cancellation flow to
-hunt for, no retention offer, and no dark pattern to argue with.
+Hand an agent your card and you've handed it your card: every merchant, every
+amount, forever. Vouch hands it a virtual card scoped to one purchase instead,
+with a spending limit Stripe enforces, that cancels itself the moment its first
+transaction posts.
+
+Your agent needs a $20–30 Uber from Atlanta to Houston? It asks Vouch over MCP,
+gets a card capped at $30, spends it once, and the card is dead before it can be
+used anywhere else. Your real number was never in the conversation.
+
+The same mechanism kills subscriptions. Every renewal gets its own single-use
+card, so the next charge is declined at the network before it reaches a
+retention flow. You don't cancel the subscription. The card stops existing.
 
 Around that sits an agent that reads your receipts, works out what's worth
 keeping, phones you to confirm anything it's unsure about, and proves it's
