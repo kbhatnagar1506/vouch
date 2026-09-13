@@ -6,13 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:migrate": "node --env-file=.env scripts/migrate.mjs"
   },
   "dependencies": {
     "next": "15.5.25",
     "react": "19.1.1",
     "react-dom": "19.1.1",
-    "pg": "8.13.1"
+    "pg": "8.13.1",
+    "jose": "6.2.12",
+    "stripe": "17.5.0",
+    "@stripe/stripe-js": "5.5.0"
   },
   "devDependencies": {
     "@types/node": "22.10.5",

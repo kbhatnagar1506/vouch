@@ -10,6 +10,15 @@ production. `DATABASE_URL` is set as a Production env var in the Vercel
 project — add it to Preview too if preview deploys need DB access (preview
 URLs are also gated by Vercel's SSO-based Deployment Protection by default).
 
+## Temporary cards (Stripe Issuing)
+
+The `card-issuing` branch generates disposable virtual cards via Stripe
+Issuing (test/sandbox mode) — one card per transaction by default, auto-
+canceled the moment its first transaction posts, so a subscription tied to
+it can never be charged again. Multi-tenant via the same shared session
+cookie as every other service. See `docs/CARDS.md` for the full setup,
+data model, PCI-scope reasoning, and deployment/subdomain instructions.
+
 ## Service branches (one repo, one DB, per-service subdomain)
 
 This is a single portal built by one person, with each onboarding step
