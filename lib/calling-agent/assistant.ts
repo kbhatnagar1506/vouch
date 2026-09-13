@@ -137,12 +137,13 @@ function modelConfig(messages: Vapi.OpenAiMessage[]): Vapi.CreateAssistantDtoMod
   return { provider, model, messages, temperature: 0.3 } as Vapi.CreateAssistantDtoModel;
 }
 
-// "Sarah" — a premade ElevenLabs voice, confirmed present on the account
-// this was built against (GET /v1/voices) — unlike the commonly-cited
-// "Rachel" (21m00Tcm4TlvDq8ikWAM), which isn't in every account's library
-// and fails TTS synthesis outright (pipeline-error-eleven-labs-voice-failed)
-// if it isn't. ELEVENLABS_VOICE_ID overrides this per-deployment regardless.
-const DEFAULT_ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL";
+// "Hale" — an ElevenLabs voice matching AGENT_NAME above, confirmed present
+// on the account this was built against (GET /v1/voices/{id}). Voice IDs
+// aren't universal across accounts (see git history: the previous default,
+// ElevenLabs' commonly-cited "Rachel", isn't in every account's library and
+// fails TTS synthesis outright — pipeline-error-eleven-labs-voice-failed —
+// if it isn't). ELEVENLABS_VOICE_ID overrides this per-deployment regardless.
+const DEFAULT_ELEVENLABS_VOICE_ID = "wWWn96OtTHu1sn8SRGEr";
 
 function voiceConfig(): Vapi.CreateAssistantDtoVoice {
   return {
