@@ -20,9 +20,33 @@ Two presets ship out of the box (`lib/calling-agent/assistant.ts`):
 - **`purchase_verification`** — read back a specific transaction (passed
   as free-text `context` on the call — merchant, amount, card) and get a
   `confirmed`/`concern_reason` verdict back. This is the "calling-agent as
-  a purchase check" use case: wherever a purchase/temporary-card flow ends
-  up living, it would call `POST /api/calling-agent/calls` with this
-  purpose before (or right after) letting a transaction through.
+  a purchase check" use case: the `dashboard` branch's "Call me" button
+  uses exactly this purpose (see its `docs/DASHBOARD.md` "Call me").
+
+  This preset follows a specific conversation shape, not just a system
+  prompt with the transaction details dropped in (`buildFirstMessage`/
+  `buildSystemPrompt` in `lib/calling-agent/assistant.ts`):
+  1. Opens with a time-of-day greeting ("Good morning/afternoon/evening")
+     and asks how they're doing.
+  2. Answers back briefly if asked in return, otherwise moves straight on
+     without waiting for it.
+  3. Gives a plain-language summary of this month's payment activity.
+  4. Works in relevant past payment/subscription history — pulled from
+     Backboard (see "Backboard context" below), not invented if there's
+     nothing there.
+  5. Gently asks about the specific renewal/reminder/check-in the call is
+     about — low-pressure, mapped onto the `confirmed`/`concern_reason`
+     fields it's collecting.
+
+  It also handles a mismatched caller conversationally: if it becomes
+  clear mid-call that whoever's on the line isn't actually the account
+  holder, it says so plainly ("It looks like I'm not speaking with
+  {name} — could you please hand the phone to them?") and ends the call,
+  rather than continuing to discuss payment details with the wrong
+  person. This is a real-time, conversational check based on what's said
+  on the call — separate from (and faster than) the post-call speaker-match
+  in "Human detection" below, which needs the full recording and so can
+  only ever confirm identity after the call has already ended.
 
 Pass your own `purpose`/`fields` for anything else — neither preset is
 special-cased into the API, they're just the two included configurations.
@@ -87,6 +111,22 @@ as the integration evolves.
 Run `npm run calling-agent:sync-assistant` after changing any of this (or
 on first setup) to push it to Vapi. It upserts by assistant name
 (`vouch-calling-agent`) so re-running it is always safe.
+
+## Backboard context (purchase_verification only)
+
+`app/api/calling-agent/calls/route.ts` looks up the caller's Backboard
+assistant (`backboard_assistants`, owned by `gmail-connector` — read-only
+here, this branch never creates one) and runs a top-k search
+(`lib/calling-agent/backboard-context.ts`, a trimmed port of
+`gmail-connector`'s `lib/backboard.ts` — only the search/read path, this
+branch never writes a memory) using the request's `context` string as the
+query. Whatever comes back is folded into the prompt as "Relevant payment
+history," which step 4 of the `purchase_verification` conversation shape
+above references. If the user has no Backboard assistant yet (Gmail never
+connected) or Backboard errors, this is a silent no-op — the call still
+goes through with just the `context` it was given, never blocked or
+degraded by a Backboard outage. Needs `BACKBOARD_API_KEY` — already set
+project-wide on Vercel Preview from `gmail-connector`'s own setup.
 
 ## Human detection: real speaker-matching against voice-verification
 

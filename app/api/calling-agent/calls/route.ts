@@ -2,8 +2,15 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { requireUser, UnauthorizedError } from "@/lib/session";
 import { getVapiClient } from "@/lib/vapi";
-import { callOverrides, DEFAULT_INTAKE_FIELDS, DEFAULT_PURPOSE, type IntakeField } from "@/lib/calling-agent/assistant";
+import {
+  callOverrides,
+  DEFAULT_INTAKE_FIELDS,
+  DEFAULT_PURPOSE,
+  PURCHASE_VERIFICATION_PURPOSE,
+  type IntakeField,
+} from "@/lib/calling-agent/assistant";
 import { insertCall, attachVapiCall, markCallFailed, listCallsForUser } from "@/lib/calling-agent/calls";
+import { topKPaymentContext, formatMemoriesForPrompt } from "@/lib/calling-agent/backboard-context";
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
@@ -53,6 +60,22 @@ export async function POST(request: Request) {
     const fields = body.fields?.length ? body.fields : DEFAULT_INTAKE_FIELDS;
     const context = body.context || null;
 
+    // For a purchase-verification call, pull the top-k most relevant
+    // Backboard memories for this user (gmail-sync writes these -- see
+    // gmail-connector's docs/GMAIL.md) using the caller-supplied context
+    // (e.g. "Netflix $15.99/mo renewal") as the search query, and fold the
+    // result into what the assistant actually sees. Returns [] (a no-op)
+    // if this user has no Backboard assistant yet -- never blocks placing
+    // the call.
+    let promptContext = context;
+    if (purpose === PURCHASE_VERIFICATION_PURPOSE && context) {
+      const memories = await topKPaymentContext(user.id, context);
+      const history = formatMemoriesForPrompt(memories);
+      if (history) {
+        promptContext = `${context}\n\nRelevant payment history:\n${history}`;
+      }
+    }
+
     const call = await insertCall({ userId: user.id, toNumber, purpose, fields, context });
 
     try {
@@ -60,7 +83,7 @@ export async function POST(request: Request) {
         assistantId: requiredEnv("VAPI_ASSISTANT_ID"),
         phoneNumberId: requiredEnv("VAPI_PHONE_NUMBER_ID"),
         customer: { number: toNumber, name: user.name || undefined },
-        assistantOverrides: callOverrides({ purpose, fields, customerName: user.name, context }),
+        assistantOverrides: callOverrides({ purpose, fields, customerName: user.name, context: promptContext }),
       });
 
       // A single `customer` (not `customers`) always gets back a single Call, never CallBatchResponse.

@@ -92,16 +92,30 @@ export function intakeSchema(fields: IntakeField[]): Vapi.JsonSchema {
 // real fixed name fixes both that and the first message below.
 const AGENT_NAME = "Hale";
 
+// Server clock, not the callee's local time -- there's no per-user
+// timezone on file to do better than this today. Close enough for a
+// "good morning/afternoon/evening" greeting; worth revisiting if a real
+// timezone ever gets attached to a user.
+function timeOfDayGreeting(now: Date = new Date()): "morning" | "afternoon" | "evening" {
+  const hour = now.getUTCHours();
+  if (hour < 12) return "morning";
+  if (hour < 18) return "afternoon";
+  return "evening";
+}
+
 // Spoken immediately on connect (firstMessageMode: "assistant-speaks-first"
 // below) rather than left for the model to generate on its first turn —
 // without this, the call opens in silence until the model produces a
-// response, which reads as dead air and gets hung up on.
+// response, which reads as dead air and gets hung up on. Always opens with
+// a time-of-day greeting and asks how they're doing -- buildSystemPrompt
+// below tells the model what to do with the answer.
 function buildFirstMessage(purpose: string, customerName?: string | null): string {
-  const greeting = customerName ? `Hi ${customerName}` : "Hi there";
-  if (purpose === PURCHASE_VERIFICATION_PURPOSE) {
-    return `${greeting}, this is ${AGENT_NAME} calling from Vouch to quickly verify a recent purchase on your account — do you have a minute?`;
-  }
-  return `${greeting}, this is ${AGENT_NAME} calling from Vouch to follow up on your account setup — do you have a minute?`;
+  const timeGreeting = `Good ${timeOfDayGreeting()}${customerName ? `, ${customerName}` : ""}`;
+  const reason =
+    purpose === PURCHASE_VERIFICATION_PURPOSE
+      ? "to quickly go over a recent purchase on your account"
+      : "to follow up on your account setup";
+  return `${timeGreeting}! This is ${AGENT_NAME} calling from Vouch ${reason}. How are you doing today?`;
 }
 
 function buildSystemPrompt(purpose: string, fields: IntakeField[], customerName?: string | null, context?: string | null): string {
@@ -112,10 +126,34 @@ function buildSystemPrompt(purpose: string, fields: IntakeField[], customerName?
   const identityCheck = customerName
     ? `Confirm you're speaking with ${customerName} before asking anything else.`
     : `Ask for the caller's name so you can confirm you're speaking with the right person before asking anything else.`;
+  // Not a live biometric check -- see docs/CALLING_AGENT.md "Human
+  // detection" for the real speaker-match, which only runs after the call
+  // ends (it needs the full recording). This is the conversational,
+  // in-the-moment fallback: if the person on the line contradicts being
+  // customerName, the model can act on that immediately without waiting
+  // for a post-call analysis that arrives too late to matter.
+  const identityMismatchHandling = customerName
+    ? `If at any point it becomes clear you are NOT actually speaking with ${customerName} — they say it's the wrong person, seem unfamiliar with having a Vouch account, or explicitly say they're someone else — stop what you're doing and say plainly: "It looks like I'm not speaking with ${customerName} — could you please hand the phone to them?" Then end the call. Do not continue collecting information, discussing payment details, or asking for confirmations from anyone who isn't confirmed to be ${customerName}.`
+    : null;
+
+  const conversationFlow =
+    purpose === PURCHASE_VERIFICATION_PURPOSE
+      ? [
+          `Conversation shape for this call, in order:`,
+          `1. You already opened with a time-of-day greeting and asked how they're doing (see your first message) — wait for their answer before moving on.`,
+          `2. If they ask how YOU'RE doing in return, answer briefly and warmly (e.g. "I'm doing great, thanks for asking!") before continuing. If they don't ask, don't wait for it or ask a second time — just move straight on.`,
+          `3. Give a short, plain-language summary of this month's payment activity on their account.`,
+          `4. Right after that, naturally work in relevant past payment/subscription history — said conversationally, not read out as a list. Use the "Relevant payment history" context below if it's present; if it's empty, skip this step rather than inventing history you don't have.`,
+          `5. Then gently ask about the specific thing this call is about (see the context below) — a renewal, a reminder, or a general check-in on their monthly payments. Keep it low-pressure: this is a gentle nudge, not a hard sell or an interrogation, and their answer maps to the fields you're collecting below.`,
+        ].join("\n")
+      : null;
+
   return [
     `You are ${AGENT_NAME}, Vouch's calling agent, phoning ${customerName || "a Vouch user"} on behalf of the Vouch platform.`,
     `Start by introducing yourself by name and company. ${identityCheck}`,
-    context ? `Specific context for this call: ${context}` : null,
+    identityMismatchHandling,
+    conversationFlow,
+    context ? `Specific context for this call:\n${context}` : null,
     `Your job for this call (purpose: "${purpose}") is to collect the following information through natural conversation — do not read it like a form, ask one thing at a time, and briefly acknowledge each answer before moving on:`,
     fieldLines,
     `Keep turns short — this is a phone call, not a chat. If the person seems confused, asks to be called back, or declines, politely wrap up and end the call rather than pushing for an answer.`,
