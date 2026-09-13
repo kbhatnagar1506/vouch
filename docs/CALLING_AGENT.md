@@ -88,25 +88,49 @@ Run `npm run calling-agent:sync-assistant` after changing any of this (or
 on first setup) to push it to Vapi. It upserts by assistant name
 (`vouch-calling-agent`) so re-running it is always safe.
 
-## Human detection (pluggable — not implemented yet)
+## Human detection: real speaker-matching against voice-verification
 
 `lib/calling-agent/human-detection.ts` exports `detectHuman()`, called
-from the webhook handler on every `end-of-call-report`. It's intentionally
-a stub today (returns `{ isHuman: null, source: "unimplemented" }`) except
-for one interim signal: Vapi's own built-in voicemail/IVR classifier
-(`voicemailDetection: { provider: "vapi" }`, set in `baseAssistantConfig()`),
-surfaced as `source: "vapi-voicemail-detection"`. That's a voicemail
-classifier, not a liveness/anti-spoofing check.
+from the webhook handler on every `end-of-call-report`. It answers two
+separate questions:
 
-The real model mentioned for this is meant to be wired in here later. The
-most likely fit is already in this repo: the `voice-verification` branch
-ships an anti-spoofing model (AASIST, served by its
-`services/voice-inference` Cloud Run service's `/spoof-check` — see that
-branch's `docs/VOICE.md`) built for exactly this "live human vs.
-clone/replay" question. Once a call's `recordingUrl` is available
-(passed into `detectHuman()` already), pointing this function at that
-service is a natural next step. Every caller of this module goes through
-`detectHuman()`, so wiring in a real model is a one-function change.
+- **`isHuman`** — is a live person on the line at all (not voicemail/an
+  IVR)? Vapi's own built-in voicemail/IVR classifier
+  (`voicemailDetection: { provider: "vapi" }`, set in
+  `baseAssistantConfig()`) is the only signal for this, surfaced as
+  `source: "vapi-voicemail-detection"`.
+- **`isAccountOwner`** — if a human, is it specifically *this* Vouch
+  user's voice? This is the one that actually matters for
+  `purchase_verification` calls: confirming a charge means nothing if
+  it's confirmed by whoever happens to answer the phone. Answered by
+  fetching the call's recording, fetching that user's enrolled embedding
+  from `voice_enrollments` (owned by the `voice-verification` branch,
+  same shared DB), and calling that branch's `voice-inference` Cloud Run
+  service's `/verify` endpoint — real ECAPA-TDNN speaker-matching, the
+  exact same model and threshold voice-verification's own `/voice` page
+  uses, not a new model built here. See
+  `lib/calling-agent/voice-match.ts` (a trimmed port of that branch's
+  `lib/voice-service.ts` — only `/verify` is needed here, not
+  `/embed`/`/spoof-check`) and `lib/crypto.ts` (ditto, for decrypting the
+  embedding — `ENCRYPTION_KEY` must match voice-verification's exactly).
+
+`source` on the result tells you which path was taken:
+`vapi-voicemail-detection` (voicemail, no speaker-match attempted),
+`speaker-match` (ran and produced a verdict — see `speakerScore`),
+`no-enrollment` (human confirmed, but this user never enrolled their
+voice), `speaker-match-error` (fetching the recording or reaching
+voice-inference failed), or `unimplemented` (no recording/user to check
+yet, e.g. mid-call).
+
+Deliberately not using voice-verification's anti-spoofing model
+(`/spoof-check`, AASIST) here — that answers "live human vs. a
+replay/clone," which is a different question from identity, and Vapi's
+own voicemail detection already covers "is anyone really there." If a
+"is this even a real live voice, not a clone/replay" check is ever
+needed on top of identity, `/spoof-check` (see voice-verification's
+`docs/VOICE.md`) is the natural place to add it — every caller already
+goes through `detectHuman()`, so that would be another one-function
+change, same as this one was.
 
 ## Setup
 

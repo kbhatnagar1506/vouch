@@ -17,6 +17,7 @@
     "react-dom": "19.1.1",
     "pg": "8.13.1",
     "@vapi-ai/server-sdk": "2.0.1",
+    "google-auth-library": "^9.15.1",
     "jose": "6.2.12"
   },
   "devDependencies": {

@@ -45,6 +45,7 @@ export async function POST(request: Request) {
       case "end-of-call-report": {
         const humanDetection = await detectHuman({
           callId: vapiCallId,
+          userId: existing?.userId ?? null,
           recordingUrl: message.artifact?.recordingUrl ?? null,
           transcript: message.artifact?.transcript ?? null,
           vapiVoicemailDetected: message.endedReason === "voicemail",
