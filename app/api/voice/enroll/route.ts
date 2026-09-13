@@ -14,15 +14,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing audio sample" }, { status: 400 });
     }
 
-    // Reject enrollment outright on a sample that looks synthetic — no
-    // point locking in a reference embedding built from a spoofed voice.
+    // AASIST was trained on clean ASVspoof2019 studio recordings, not
+    // compressed browser-mic audio (webm/opus, echo cancellation, etc.) —
+    // that channel mismatch is producing false positives on real speech
+    // (see docs/VOICE.md "Anti-spoofing — what's left"). Advisory only for
+    // now: logged for calibration, not blocking, until validated against
+    // real enrollment/verify recordings rather than a synthetic test tone.
     const spoof = await checkSpoof(audio);
-    if (spoof.model_loaded && spoof.is_spoof) {
-      return NextResponse.json(
-        { error: "This sample looks synthetic or replayed. Please re-record live." },
-        { status: 422 },
-      );
-    }
+    console.log("[voice/enroll] spoof-check", {
+      userId: user.id,
+      model_loaded: spoof.model_loaded,
+      spoof_score: spoof.spoof_score,
+      is_spoof: spoof.is_spoof,
+    });
 
     const { embedding, model_version } = await embedAudio(audio);
     const encrypted = encryptSecret(JSON.stringify(embedding));

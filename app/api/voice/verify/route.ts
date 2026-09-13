@@ -30,7 +30,16 @@ export async function POST(request: Request) {
     ]);
 
     const spoofed = spoof.model_loaded && spoof.is_spoof;
-    const passed = speaker.match && !spoofed;
+    // Advisory only for now, not gating — see the enroll route for why
+    // (AASIST channel mismatch on browser-mic audio, needs calibration).
+    const passed = speaker.match;
+    console.log("[voice/verify] spoof-check", {
+      userId: user.id,
+      model_loaded: spoof.model_loaded,
+      spoof_score: spoof.spoof_score,
+      is_spoof: spoof.is_spoof,
+      speaker_score: speaker.score,
+    });
 
     await pool.query(
       `insert into voice_verifications (user_id, speaker_score, spoof_score, passed)

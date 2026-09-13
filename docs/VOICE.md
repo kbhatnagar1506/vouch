@@ -69,14 +69,24 @@ later, separate project — see "Fine-tuning roadmap" below.
 
 ### Anti-spoofing — what's left
 
-The pretrained checkpoint is wired up and running, but hasn't been
-validated against real Vouch audio (only a synthetic test tone so far —
-enough to prove the pipeline doesn't crash, not that `SPOOF_THRESHOLD`
-(default `0.5`) is the right cutoff for real voices captured through a
-browser mic). Calibrate it against real enroll/verify recordings — bonafide
-first, then an actual spoof attempt (e.g. a recording of the enrollment
-phrase played back, or a cloned sample) — before relying on it to actually
-block anything.
+Confirmed against real testing: AASIST was trained on clean ASVspoof2019
+studio recordings, and that channel mismatch against compressed
+browser-mic audio (webm/opus, echo cancellation, resampling) produces
+false positives on genuine speech — real enrollment attempts were getting
+rejected as "synthetic." Both `app/api/voice/enroll` and
+`app/api/voice/verify` currently treat the spoof-check result as
+**advisory only** (logged, returned in the API response, shown in the UI)
+rather than gating pass/fail, until it's recalibrated.
+
+To fix for real: collect actual spoof_score values from the `console.log`
+lines in those two routes (via `vercel logs` or Cloud Run's own logs)
+across real bonafide browser-mic recordings, and separately across actual
+spoof attempts (a replayed recording of the enrollment phrase, a cloned
+sample), and either raise `SPOOF_THRESHOLD` well past whatever the
+bonafide false-positive score range turns out to be, or fine-tune AASIST
+on browser-mic audio instead of relying on the ASVspoof-only checkpoint.
+Re-enable gating (change `passed` in the verify route, add back the enroll
+rejection) only once that's done.
 
 ## Data model
 
