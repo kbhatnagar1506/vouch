@@ -40,7 +40,16 @@ Browser mic  ──▶  /api/voice/enroll|verify  ──▶  voice-inference (Cl
   embedding per user (AES-256-GCM encrypted at rest, same treatment
   `bank-connection` gives Plaid access tokens — see `lib/crypto.ts`);
   verification compares a new clip's embedding to it by cosine similarity
-  against `VOICE_MATCH_THRESHOLD` (default `0.75`).
+  against `VOICE_MATCH_THRESHOLD` (default `0.5` — the original `0.75`
+  guess rejected genuine same-speaker verifications at 66.9% similarity in
+  real testing; this checkpoint's raw, unnormalized cosine scores run
+  lower than intuition suggests, and 0.5 still isn't calibrated against
+  real negative/different-speaker trials, just less wrong than 0.75 was).
+  The live monitor (`app/voice/page.tsx`) records in ~4.5s windows —
+  shorter clips produced unusably noisy embeddings (an 18% same-speaker
+  score at a 2.2s window) since ECAPA-TDNN needs a few seconds of clean
+  speech, and each new `MediaRecorder` instance pays an opus warm-up cost
+  right at the start of its window.
 - **Anti-spoofing**: [AASIST](https://github.com/clovaai/aasist), a graph
   attention network pretrained on ASVspoof2019 LA to flag synthetic,
   voice-converted, or replayed audio. Vendored unmodified (MIT license —

@@ -8,7 +8,12 @@ from .audio import decode_to_waveform, duration_seconds
 
 app = FastAPI(title="vouch-voice-inference")
 
-DEFAULT_MATCH_THRESHOLD = 0.75
+# 0.75 (the original guess) rejected real same-speaker verifications in
+# testing at 66.9% cosine similarity — this checkpoint's raw, unnormalized
+# similarity scores run lower than that intuition suggests. 0.5 is a
+# provisional, better-fit default; still not calibrated against real
+# negative (different-speaker) trials — see docs/VOICE.md.
+DEFAULT_MATCH_THRESHOLD = 0.5
 
 # Cloud Run's own IAM invoker check already authenticates the caller (only
 # the voice-inference-caller service account can reach this service at
