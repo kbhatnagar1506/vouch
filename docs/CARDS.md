@@ -55,25 +55,90 @@ asks for a nonce, that step needs adding to both
 
 ## Setup
 
-1. [Stripe Dashboard](https://dashboard.stripe.com) → make sure **Issuing**
-   is enabled for the account (test mode issuing is available by default
-   on new accounts; live-mode issuing needs additional underwriting —
-   irrelevant here since this is sandbox-only).
-2. Test mode → Developers → API keys → copy the secret and publishable
+1. [Stripe Dashboard](https://dashboard.stripe.com) → **Issuing** → make
+   sure it's activated as **"Issuing for your business"** (issuing cards
+   directly to your own users) — not the "Financial Accounts for
+   platforms" / Connect path (issuing to *connected accounts*). Picking
+   the platform path by mistake pulls in a much bigger Connect
+   integration and, empirically, provisions a financial account
+   asynchronously rather than instantly; the direct path is documented as
+   instant. If Issuing isn't set up at all yet, the API returns "Your
+   account is not set up to use Issuing" until you do this in the
+   Dashboard — nothing to fix in code.
+2. Test mode → Balances → the **Financial account** row → copy its
+   **Financial account ID** (`fa_test_...`, shown in the right-hand
+   sidebar on that account's balance page) into
+   `STRIPE_ISSUING_FINANCIAL_ACCOUNT_ID`. See "Financial account" below
+   for why this is required at all.
+3. Test mode → Developers → API keys → copy the secret and publishable
    keys into `STRIPE_SECRET_KEY` / `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
-3. Developers → Webhooks → add an endpoint at
+4. Developers → Webhooks → add an endpoint at
    `https://cards.getvouch.club/api/stripe/webhook` (or use `stripe
-   listen --forward-to localhost:3000/api/stripe/webhook` for local dev),
+   listen --forward-to localhost:3000/api/stripe/webhook` for local dev,
+   or create it via the API with `stripe.webhookEndpoints.create`),
    subscribed to at least `issuing_transaction.created` and
    `issuing_authorization.request`. Copy its signing secret into
    `STRIPE_WEBHOOK_SECRET`.
-4. Run `npm run db:migrate`.
+5. Run `npm run db:migrate`.
 
 Test-mode Issuing authorizations aren't triggered by real purchases —
 simulate one from the Dashboard (Test mode → Issuing → a card →
 "Simulate authorization") or via `stripe.testHelpers.issuing.authorizations.create`,
 which is the only way to see a card actually auto-cancel end to end
 without a real merchant transaction.
+
+## Financial account
+
+Card creation on this account rejects a request with no financial account
+specified ("The v2 financial account id must be specified"), and further
+rejects the older, more commonly-documented `financial_account` parameter
+name in favor of a newer one:
+
+```ts
+stripe.issuing.cards.create({
+  cardholder: cardholderId,
+  // ...
+  financial_account_v2: process.env.STRIPE_ISSUING_FINANCIAL_ACCOUNT_ID,
+});
+```
+
+`financial_account_v2` isn't in the installed `stripe` SDK version's typed
+parameters yet (only the older `financial_account` field is), so
+`lib/stripe.ts` adds it via an untyped spread rather than waiting on an
+SDK update. Confirmed empirically, live, against a real test-mode account
+— not documented anywhere found at the time this was written.
+
+A freshly-created financial account can sit in `status: "pending"` for a
+while before card creation against it succeeds ("You cannot create a new
+card for FinancialAccount ... because its status is pending"); nothing to
+do but wait and retry — there's no documented way to force it, and the
+account-level detail needed to inspect *why* it's pending sits behind an
+undocumented Stripe API version requiring a `.preview` suffix, which this
+integration deliberately does not depend on.
+
+## Cardholder requirements
+
+The first card request for a given user creates their Stripe Issuing
+Cardholder (`ensureCardholder` in `lib/stripe.ts`) — every later request
+reuses it. That first creation needs more than the "for your business"
+docs' minimal example implies, confirmed by iterating against real `card
+creation failed` errors until they cleared:
+
+- `individual.first_name` / `individual.last_name`, not just a top-level
+  `name` string — `lib/stripe.ts`'s `splitName()` best-effort splits the
+  user's stored display name (falling back to their email's local part if
+  blank).
+- `individual.card_issuing.user_terms_acceptance.{date,ip}` — Stripe
+  requires an explicit, timestamped acceptance of its cardholder terms per
+  individual, or every card for them fails with "outstanding requirements
+  preventing them from activating an issued card." Recorded here as
+  "generating a card implies acceptance," with the requesting browser's IP
+  (`getRequestIp` in `app/api/cards/route.ts`) — a real (non-sandbox)
+  launch should make this an explicit, visible checkbox instead of an
+  implicit side effect of clicking "Generate a card."
+- `phone_number` — required for 3D Secure; `POST /api/cards` returns
+  `{ phoneRequired: true }` the first time a user without one tries, and
+  `components/card-manager.tsx` shows a one-time phone field in response.
 
 ## Data model
 

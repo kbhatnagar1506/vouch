@@ -23,11 +23,42 @@ function getStripeClient(): Stripe {
   return cachedClient;
 }
 
+/** Thrown by ensureCardholder when a brand-new cardholder needs a phone number that wasn't supplied -- callers should prompt for one and retry. */
+export class PhoneNumberRequiredError extends Error {
+  constructor() {
+    super("A phone number is required to set up card issuance (Stripe uses it for 3D Secure).");
+    this.name = "PhoneNumberRequiredError";
+  }
+}
+
+/**
+ * Best-effort split of a free-text display name into the first_name/
+ * last_name Stripe's cardholder.individual requires. Falls back to the
+ * email's local part when there's no name on file at all (e.g. the
+ * `demo-user` seed row) -- Stripe rejects an empty first_name/last_name.
+ */
+function splitName(name: string, emailFallback: string): { firstName: string; lastName: string } {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    const local = emailFallback.split("@")[0] || "Vouch";
+    return { firstName: local, lastName: local };
+  }
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: parts[0] };
+  }
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
 /**
  * Stripe scopes card issuance per-cardholder. Each Vouch user gets exactly
  * one, created lazily on first card request and cached in
  * stripe_cardholders -- same pattern as gmail-connector's
  * ensureBackboardAssistant().
+ *
+ * Only creating a brand-new cardholder needs `phoneNumber` and
+ * `termsAcceptanceIp` -- an existing one is returned without touching
+ * either, so repeat card requests never need to re-collect them.
  *
  * Test-mode cardholders still require a billing address; since this is
  * sandbox-only for now, a placeholder US address is used when the user
@@ -35,7 +66,10 @@ function getStripeClient(): Stripe {
  * any production (non-test-mode) use -- Stripe will reject a live
  * cardholder with obviously fake address data.
  */
-export async function ensureCardholder(user: User): Promise<string> {
+export async function ensureCardholder(
+  user: User,
+  opts: { phoneNumber?: string; termsAcceptanceIp: string },
+): Promise<string> {
   const existing = await pool.query<{ stripe_cardholder_id: string }>(
     "select stripe_cardholder_id from stripe_cardholders where user_id = $1",
     [user.id],
@@ -44,11 +78,17 @@ export async function ensureCardholder(user: User): Promise<string> {
     return existing.rows[0].stripe_cardholder_id;
   }
 
+  if (!opts.phoneNumber) {
+    throw new PhoneNumberRequiredError();
+  }
+
+  const { firstName, lastName } = splitName(user.name, user.email);
   const stripe = getStripeClient();
   const cardholder = await stripe.issuing.cardholders.create({
     type: "individual",
     name: user.name || user.email,
     email: user.email,
+    phone_number: opts.phoneNumber,
     billing: {
       address: {
         line1: "185 Berry St",
@@ -56,6 +96,21 @@ export async function ensureCardholder(user: User): Promise<string> {
         state: "CA",
         postal_code: "94107",
         country: "US",
+      },
+    },
+    individual: {
+      first_name: firstName,
+      last_name: lastName,
+      // Stripe requires an explicit, timestamped acceptance of its
+      // cardholder terms per individual before it will activate any card
+      // for them -- recorded here as "generating a card implies
+      // acceptance"; a real (non-sandbox) launch should make this an
+      // explicit, visible checkbox instead of an implicit side effect.
+      card_issuing: {
+        user_terms_acceptance: {
+          date: Math.floor(Date.now() / 1000),
+          ip: opts.termsAcceptanceIp,
+        },
       },
     },
   });
@@ -128,12 +183,27 @@ export interface CreateCardInput {
    * false only for a deliberately long-lived card.
    */
   singleUse?: boolean;
+  /** Only actually used the first time this user requests a card -- see ensureCardholder. */
+  phoneNumber?: string;
+  /** The requester's IP, recorded as this cardholder's terms-acceptance IP the first time only. */
+  termsAcceptanceIp: string;
+}
+
+function getIssuingFinancialAccountId(): string {
+  const id = process.env.STRIPE_ISSUING_FINANCIAL_ACCOUNT_ID;
+  if (!id) {
+    throw new Error("STRIPE_ISSUING_FINANCIAL_ACCOUNT_ID is not set. See docs/CARDS.md.");
+  }
+  return id;
 }
 
 /** Issues a new virtual card (no physical fulfillment) and records it locally. */
 export async function createVirtualCard(user: User, input: CreateCardInput): Promise<IssuedCard> {
   const stripe = getStripeClient();
-  const cardholderId = await ensureCardholder(user);
+  const cardholderId = await ensureCardholder(user, {
+    phoneNumber: input.phoneNumber,
+    termsAcceptanceIp: input.termsAcceptanceIp,
+  });
   const singleUse = input.singleUse ?? true;
 
   const card = await stripe.issuing.cards.create({
@@ -144,6 +214,11 @@ export async function createVirtualCard(user: User, input: CreateCardInput): Pro
     spending_controls: input.spendingLimitCents
       ? { spending_limits: [{ amount: input.spendingLimitCents, interval: "all_time" }] }
       : undefined,
+    // `financial_account_v2` isn't in this SDK version's typed params yet
+    // (it types the older `financial_account` field instead) -- this
+    // account's Issuing setup requires the v2 field name specifically, per
+    // live testing (see docs/CARDS.md "Financial account").
+    ...({ financial_account_v2: getIssuingFinancialAccountId() } as Record<string, string>),
   });
 
   const result = await pool.query<IssuedCardRow>(

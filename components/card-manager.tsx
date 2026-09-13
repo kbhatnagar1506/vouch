@@ -28,6 +28,8 @@ export function CardManager() {
   const [label, setLabel] = useState("");
   const [merchant, setMerchant] = useState("");
   const [amount, setAmount] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [needsPhone, setNeedsPhone] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revealingCardId, setRevealingCardId] = useState<string | null>(null);
@@ -58,13 +60,22 @@ export function CardManager() {
       const res = await fetch("/api/cards", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: label.trim(), merchant: merchant.trim() || undefined, spendingLimitCents: amountCents }),
+        body: JSON.stringify({
+          label: label.trim(),
+          merchant: merchant.trim() || undefined,
+          spendingLimitCents: amountCents,
+          phoneNumber: phoneNumber.trim() || undefined,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Couldn't generate a card");
+      if (!res.ok) {
+        if (data.phoneRequired) setNeedsPhone(true);
+        throw new Error(data.error ?? "Couldn't generate a card");
+      }
       setLabel("");
       setMerchant("");
       setAmount("");
+      setNeedsPhone(false);
       await loadCards();
       setRevealingCardId(data.card.id);
     } catch (err) {
@@ -114,6 +125,20 @@ export function CardManager() {
           inputMode="decimal"
           className="mb-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
         />
+        {needsPhone && (
+          <div className="mb-3">
+            <input
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="Phone number, e.g. +14155550123"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+            />
+            <p className="mt-1 text-[12px] text-slate-400">
+              One-time — Stripe needs this to verify you as a cardholder. By continuing, you agree to Stripe&apos;s
+              cardholder terms.
+            </p>
+          </div>
+        )}
         <button
           onClick={onGenerate}
           disabled={creating}
