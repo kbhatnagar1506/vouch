@@ -52,6 +52,30 @@ export const DEFAULT_INTAKE_FIELDS: IntakeField[] = [
   { key: "financial_goal", label: "Financial goal", description: "What the customer is trying to achieve on Vouch.", type: "string" },
 ];
 
+export const PURCHASE_VERIFICATION_PURPOSE = "purchase_verification";
+
+// A second preset: confirming a specific purchase/transaction with the
+// cardholder before (or right after) it goes through — the phone-call
+// equivalent of a bank's "did you just try to spend $X at Y?" fraud check.
+// Pass the actual transaction details (merchant, amount, card) as `context`
+// on the call (see CallOverridesOptions) — these fields just capture the
+// verdict, not the transaction itself.
+export const PURCHASE_VERIFICATION_FIELDS: IntakeField[] = [
+  {
+    key: "confirmed",
+    label: "Confirmed",
+    description: "true if the customer confirms they personally authorized this specific purchase, false if they say they did not.",
+    type: "boolean",
+  },
+  {
+    key: "concern_reason",
+    label: "Concern reason",
+    description:
+      "If not confirmed, or the customer sounds unsure/concerned, a brief note why (e.g. 'doesn't recognize merchant', 'says card was lost'). Empty string if confirmed with no concerns.",
+    type: "string",
+  },
+];
+
 export function intakeSchema(fields: IntakeField[]): Vapi.JsonSchema {
   return {
     type: "object",
@@ -62,17 +86,20 @@ export function intakeSchema(fields: IntakeField[]): Vapi.JsonSchema {
   };
 }
 
-function buildSystemPrompt(purpose: string, fields: IntakeField[], customerName?: string | null): string {
+function buildSystemPrompt(purpose: string, fields: IntakeField[], customerName?: string | null, context?: string | null): string {
   const fieldLines = fields.map((f) => `- ${f.label}: ${f.description}`).join("\n");
   return [
     `You are Vouch's calling agent, phoning ${customerName || "a Vouch user"} on behalf of the Vouch platform.`,
     `Start by introducing yourself by name and company, and confirm you're speaking with the right person before asking anything else.`,
+    context ? `Specific context for this call: ${context}` : null,
     `Your job for this call (purpose: "${purpose}") is to collect the following information through natural conversation — do not read it like a form, ask one thing at a time, and briefly acknowledge each answer before moving on:`,
     fieldLines,
     `Keep turns short — this is a phone call, not a chat. If the person seems confused, asks to be called back, or declines, politely wrap up and end the call rather than pushing for an answer.`,
     `If you reach voicemail or an answering machine, leave a brief callback message and end the call — don't try to collect information from a recording.`,
     `When you've collected everything (or the person has declined to continue), thank them and end the call.`,
-  ].join("\n\n");
+  ]
+    .filter((line): line is string => line != null)
+    .join("\n\n");
 }
 
 // Any Vapi-supported model provider works here (anthropic, openai, xai,
@@ -141,6 +168,14 @@ export interface CallOverridesOptions {
   purpose?: string;
   fields?: IntakeField[];
   customerName?: string | null;
+  /**
+   * Free-text detail specific to this one call — e.g. for
+   * PURCHASE_VERIFICATION_PURPOSE, the actual transaction: "a $42.50 charge
+   * at Acme Hardware on the card ending 1234, made 3 minutes ago." Without
+   * this the agent knows the *shape* of what to ask (the fields) but not
+   * the specifics of *this* call.
+   */
+  context?: string | null;
 }
 
 /**
@@ -153,9 +188,10 @@ export function callOverrides({
   purpose = DEFAULT_PURPOSE,
   fields = DEFAULT_INTAKE_FIELDS,
   customerName,
+  context,
 }: CallOverridesOptions): Vapi.AssistantOverrides {
   return {
-    model: modelConfig([{ role: "system", content: buildSystemPrompt(purpose, fields, customerName) }]),
+    model: modelConfig([{ role: "system", content: buildSystemPrompt(purpose, fields, customerName, context) }]),
     analysisPlan: { structuredDataPlan: structuredDataPlan(fields) },
   };
 }

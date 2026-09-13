@@ -1,14 +1,31 @@
 # Calling agent (Vapi + ElevenLabs + Gemini)
 
 This branch (`calling-agent`) adds an outbound voice-call service: it
-phones a Vouch user on the platform's behalf to collect or confirm
-onboarding details, using [Vapi](https://vapi.ai) for call orchestration
-and telephony, [ElevenLabs](https://elevenlabs.io) for the assistant's
-voice, and (by default) Google Gemini as the reasoning model. Everything
-that configures the call — the assistant's prompt, voice, model, what it
-asks about, the webhook it reports back to — is defined in code
-(`lib/calling-agent/`) and pushed to Vapi via its API, not clicked together
-in Vapi's dashboard.
+phones a Vouch user on the platform's behalf — either to collect/confirm
+onboarding details, or to verify a specific purchase with the cardholder
+directly (the phone-call equivalent of a bank's "did you just try to spend
+$X at Y?" fraud check) — using [Vapi](https://vapi.ai) for call
+orchestration and telephony, [ElevenLabs](https://elevenlabs.io) for the
+assistant's voice, and (by default) Google Gemini as the reasoning model.
+Everything that configures the call — the assistant's prompt, voice,
+model, what it asks about, the webhook it reports back to — is defined in
+code (`lib/calling-agent/`) and pushed to Vapi via its API, not clicked
+together in Vapi's dashboard.
+
+Two presets ship out of the box (`lib/calling-agent/assistant.ts`):
+
+- **`onboarding_profile`** (default) — confirm/collect the fields on the
+  portal's `user_profiles` table (address, employment, income, financial
+  goal) over a natural conversation.
+- **`purchase_verification`** — read back a specific transaction (passed
+  as free-text `context` on the call — merchant, amount, card) and get a
+  `confirmed`/`concern_reason` verdict back. This is the "calling-agent as
+  a purchase check" use case: wherever a purchase/temporary-card flow ends
+  up living, it would call `POST /api/calling-agent/calls` with this
+  purpose before (or right after) letting a transaction through.
+
+Pass your own `purpose`/`fields` for anything else — neither preset is
+special-cased into the API, they're just the two included configurations.
 
 ## How it works
 
@@ -17,9 +34,10 @@ in Vapi's dashboard.
    `calling_agent_calls`, then calls Vapi's `calls.create` with the saved
    assistant (`VAPI_ASSISTANT_ID`) plus per-call
    [`assistantOverrides`](https://docs.vapi.ai) — the system prompt and
-   structured-data schema for *this* call's purpose/fields (see
-   `lib/calling-agent/assistant.ts`'s `callOverrides()`). Defaults to the
-   current user's `user_profiles.phone_number` if no number is given.
+   structured-data schema for *this* call's purpose/fields, plus whatever
+   free-text `context` was passed (e.g. the transaction being verified —
+   see `lib/calling-agent/assistant.ts`'s `callOverrides()`). Defaults to
+   the current user's `user_profiles.phone_number` if no number is given.
 2. Vapi places the PSTN call, runs speech-to-text, the assistant's LLM
    turn, and ElevenLabs text-to-speech, and posts events back to
    `POST /api/calling-agent/webhook` as the call progresses
@@ -203,7 +221,20 @@ is implemented here — see the portal branch.
 
 ## Known gaps
 
-- **Human detection is a stub** — see "Human detection" above.
+- **Purchase verification is fire-and-forget today, not a blocking gate.**
+  `POST /api/calling-agent/calls` returns as soon as Vapi accepts the
+  call — the actual confirm/deny verdict (`structuredData.confirmed`)
+  only lands later, via the webhook, once the call ends. A real
+  "hold the purchase until confirmed" flow needs whatever triggers the
+  call (a future temporary-card/purchase service) to either poll
+  `GET /api/calling-agent/calls/:id` until `status: "ended"`, or have the
+  webhook notify it directly — this branch doesn't do either of those
+  since there's no purchase flow to wire into yet.
+- **Human detection is a stub** — see "Human detection" above. For
+  purchase verification specifically, the more relevant future check is
+  less "is a human on the line" and more "is this the *account owner's*
+  voice" — i.e. `voice-verification`'s speaker-matching (ECAPA-TDNN
+  embeddings), not just its anti-spoofing model.
 - **No rate limiting / abuse protection** on `POST /api/calling-agent/calls`
   — anyone with a session can place a call, which costs real money
   (Vapi + telephony + ElevenLabs + the LLM, per minute). Worth a per-user

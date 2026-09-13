@@ -8,6 +8,7 @@ interface CallRecord {
   vapiCallId: string | null;
   toNumber: string;
   purpose: string;
+  context: string | null;
   status: string;
   endedReason: string | null;
   transcript: string | null;
@@ -16,6 +17,18 @@ interface CallRecord {
   humanDetection: { isHuman: boolean | null; confidence: number | null; source: string; reason?: string } | null;
   createdAt: string;
 }
+
+// Keep in sync with the presets in lib/calling-agent/assistant.ts — this is
+// just which one to ask the API for; the field lists themselves live there.
+const PRESETS = [
+  { purpose: "onboarding_profile", label: "Onboarding profile", needsContext: false, contextPlaceholder: null },
+  {
+    purpose: "purchase_verification",
+    label: "Purchase verification",
+    needsContext: true,
+    contextPlaceholder: "e.g. a $42.50 charge at Acme Hardware on the card ending 1234, made 3 minutes ago",
+  },
+] as const;
 
 const ACTIVE_STATUSES = new Set(["queued", "scheduled", "ringing", "in-progress", "forwarding"]);
 
@@ -46,7 +59,8 @@ export default function CallingAgentPage() {
   const [email, setEmail] = useState<string | null>(null);
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [toNumber, setToNumber] = useState("");
-  const [purpose, setPurpose] = useState("");
+  const [purpose, setPurpose] = useState<string>(PRESETS[0].purpose);
+  const [context, setContext] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -93,12 +107,12 @@ export default function CallingAgentPage() {
       const res = await fetch("/api/calling-agent/calls", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toNumber: toNumber || undefined, purpose: purpose || undefined }),
+        body: JSON.stringify({ toNumber: toNumber || undefined, purpose, context: context || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to start call");
       setToNumber("");
-      setPurpose("");
+      setContext("");
       await loadCalls();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -125,8 +139,8 @@ export default function CallingAgentPage() {
         <div className="rounded-[20px] border border-slate-100 bg-white p-7 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_rgba(15,23,42,0.08)]">
           <h1 className="mb-1.5 text-2xl font-bold tracking-tight text-slate-900">Calling agent</h1>
           <p className="mb-6 text-sm text-slate-500">
-            Place an outbound call — a Vapi + ElevenLabs + Gemini voice agent calls on Vouch&apos;s behalf to collect or confirm
-            onboarding details, then reports back here.
+            Place an outbound call — a Vapi + ElevenLabs + Gemini voice agent calls on Vouch&apos;s behalf to collect onboarding
+            details or verify a purchase with the customer directly, then reports back here.
           </p>
 
           <form onSubmit={onSubmit} className="space-y-3">
@@ -137,13 +151,26 @@ export default function CallingAgentPage() {
               placeholder="Phone number (defaults to your profile's)"
               className="w-full rounded-[10px] border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
             />
-            <input
-              type="text"
+            <select
               value={purpose}
               onChange={(e) => setPurpose(e.target.value)}
-              placeholder="Purpose (defaults to onboarding_profile)"
-              className="w-full rounded-[10px] border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
-            />
+              className="w-full rounded-[10px] border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+            >
+              {PRESETS.map((p) => (
+                <option key={p.purpose} value={p.purpose}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            {PRESETS.find((p) => p.purpose === purpose)?.needsContext && (
+              <textarea
+                value={context}
+                onChange={(e) => setContext(e.target.value)}
+                placeholder={PRESETS.find((p) => p.purpose === purpose)?.contextPlaceholder ?? undefined}
+                rows={2}
+                className="w-full rounded-[10px] border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
+              />
+            )}
             <button
               type="submit"
               disabled={submitting}
@@ -176,6 +203,12 @@ export default function CallingAgentPage() {
 
                   {expanded && (
                     <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
+                      {call.context && (
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Context</div>
+                          <p className="text-slate-700">{call.context}</p>
+                        </div>
+                      )}
                       {call.humanDetection && (
                         <div>
                           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Human detection</div>

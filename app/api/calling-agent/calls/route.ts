@@ -29,10 +29,14 @@ interface CreateCallBody {
   toNumber?: string;
   purpose?: string;
   fields?: IntakeField[];
+  /** Free-text detail for this one call — e.g. the transaction being verified. See CallOverridesOptions.context. */
+  context?: string;
 }
 
-// Places an outbound call via Vapi on behalf of the current user's
-// onboarding profile (or a custom purpose/fields, passed in the body).
+// Places an outbound call via Vapi on behalf of the current user — e.g. to
+// collect/confirm onboarding details (DEFAULT_PURPOSE), or to verify a
+// specific purchase (PURCHASE_VERIFICATION_PURPOSE, with the transaction
+// details passed as `context`). Custom purpose/fields work for anything else.
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
@@ -47,15 +51,16 @@ export async function POST(request: Request) {
     }
     const purpose = body.purpose || DEFAULT_PURPOSE;
     const fields = body.fields?.length ? body.fields : DEFAULT_INTAKE_FIELDS;
+    const context = body.context || null;
 
-    const call = await insertCall({ userId: user.id, toNumber, purpose, fields });
+    const call = await insertCall({ userId: user.id, toNumber, purpose, fields, context });
 
     try {
       const response = await getVapiClient().calls.create({
         assistantId: requiredEnv("VAPI_ASSISTANT_ID"),
         phoneNumberId: requiredEnv("VAPI_PHONE_NUMBER_ID"),
         customer: { number: toNumber, name: user.name || undefined },
-        assistantOverrides: callOverrides({ purpose, fields, customerName: user.name }),
+        assistantOverrides: callOverrides({ purpose, fields, customerName: user.name, context }),
       });
 
       // A single `customer` (not `customers`) always gets back a single Call, never CallBatchResponse.

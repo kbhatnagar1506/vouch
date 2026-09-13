@@ -8,6 +8,7 @@ export interface CallRecord {
   vapiAssistantId: string | null;
   toNumber: string;
   purpose: string;
+  context: string | null;
   intakeSchema: IntakeField[];
   status: string;
   endedReason: string | null;
@@ -27,6 +28,7 @@ interface CallRow {
   vapi_assistant_id: string | null;
   to_number: string;
   purpose: string;
+  context: string | null;
   intake_schema: IntakeField[];
   status: string;
   ended_reason: string | null;
@@ -47,6 +49,7 @@ function fromRow(row: CallRow): CallRecord {
     vapiAssistantId: row.vapi_assistant_id,
     toNumber: row.to_number,
     purpose: row.purpose,
+    context: row.context,
     intakeSchema: row.intake_schema,
     status: row.status,
     endedReason: row.ended_reason,
@@ -65,12 +68,13 @@ export async function insertCall(params: {
   toNumber: string;
   purpose: string;
   fields: IntakeField[];
+  context?: string | null;
 }): Promise<CallRecord> {
   const { rows } = await pool.query<CallRow>(
-    `insert into calling_agent_calls (user_id, to_number, purpose, intake_schema)
-     values ($1, $2, $3, $4)
+    `insert into calling_agent_calls (user_id, to_number, purpose, intake_schema, context)
+     values ($1, $2, $3, $4, $5)
      returning *`,
-    [params.userId, params.toNumber, params.purpose, JSON.stringify(params.fields)],
+    [params.userId, params.toNumber, params.purpose, JSON.stringify(params.fields), params.context ?? null],
   );
   return fromRow(rows[0]);
 }
