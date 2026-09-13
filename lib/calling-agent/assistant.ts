@@ -86,23 +86,35 @@ export function intakeSchema(fields: IntakeField[]): Vapi.JsonSchema {
   };
 }
 
+// A live test call had the model say the literal words "my name is agent
+// name" — asked to "introduce yourself by name" with no actual name given,
+// it treated "agent name" as the value to fill in. Giving the persona a
+// real fixed name fixes both that and the first message below.
+const AGENT_NAME = "Alex";
+
 // Spoken immediately on connect (firstMessageMode: "assistant-speaks-first"
 // below) rather than left for the model to generate on its first turn —
 // without this, the call opens in silence until the model produces a
 // response, which reads as dead air and gets hung up on.
 function buildFirstMessage(purpose: string, customerName?: string | null): string {
-  const name = customerName || "there";
+  const greeting = customerName ? `Hi ${customerName}` : "Hi there";
   if (purpose === PURCHASE_VERIFICATION_PURPOSE) {
-    return `Hi ${name}, this is Vouch calling to quickly verify a recent purchase on your account — do you have a minute?`;
+    return `${greeting}, this is ${AGENT_NAME} calling from Vouch to quickly verify a recent purchase on your account — do you have a minute?`;
   }
-  return `Hi ${name}, this is Vouch calling to follow up on your account setup — do you have a minute?`;
+  return `${greeting}, this is ${AGENT_NAME} calling from Vouch to follow up on your account setup — do you have a minute?`;
 }
 
 function buildSystemPrompt(purpose: string, fields: IntakeField[], customerName?: string | null, context?: string | null): string {
   const fieldLines = fields.map((f) => `- ${f.label}: ${f.description}`).join("\n");
+  // Same bug in reverse: without a real customerName, telling the model to
+  // "confirm you're speaking with the right person" gave it nothing to
+  // confirm and it garbled trying anyway — so branch on whether one exists.
+  const identityCheck = customerName
+    ? `Confirm you're speaking with ${customerName} before asking anything else.`
+    : `Ask for the caller's name so you can confirm you're speaking with the right person before asking anything else.`;
   return [
-    `You are Vouch's calling agent, phoning ${customerName || "a Vouch user"} on behalf of the Vouch platform.`,
-    `Start by introducing yourself by name and company, and confirm you're speaking with the right person before asking anything else.`,
+    `You are ${AGENT_NAME}, Vouch's calling agent, phoning ${customerName || "a Vouch user"} on behalf of the Vouch platform.`,
+    `Start by introducing yourself by name and company. ${identityCheck}`,
     context ? `Specific context for this call: ${context}` : null,
     `Your job for this call (purpose: "${purpose}") is to collect the following information through natural conversation — do not read it like a form, ask one thing at a time, and briefly acknowledge each answer before moving on:`,
     fieldLines,
@@ -125,7 +137,12 @@ function modelConfig(messages: Vapi.OpenAiMessage[]): Vapi.CreateAssistantDtoMod
   return { provider, model, messages, temperature: 0.3 } as Vapi.CreateAssistantDtoModel;
 }
 
-const DEFAULT_ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // "Rachel" — ElevenLabs' stock default voice.
+// "Sarah" — a premade ElevenLabs voice, confirmed present on the account
+// this was built against (GET /v1/voices) — unlike the commonly-cited
+// "Rachel" (21m00Tcm4TlvDq8ikWAM), which isn't in every account's library
+// and fails TTS synthesis outright (pipeline-error-eleven-labs-voice-failed)
+// if it isn't. ELEVENLABS_VOICE_ID overrides this per-deployment regardless.
+const DEFAULT_ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL";
 
 function voiceConfig(): Vapi.CreateAssistantDtoVoice {
   return {

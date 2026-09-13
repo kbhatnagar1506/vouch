@@ -3,7 +3,7 @@
 // (voice/model/prompt) before wiring the full product flow (which needs a
 // public deployment for webhooks — see docs/CALLING_AGENT.md).
 //
-//   npm run calling-agent:test-call -- --to +14155551234 [--purpose purchase_verification] [--context "..."]
+//   npm run calling-agent:test-call -- --to +14155551234 [--purpose purchase_verification] [--context "..."] [--name "..."]
 import { VapiClient } from "@vapi-ai/server-sdk";
 import {
   callOverrides,
@@ -35,6 +35,7 @@ async function main() {
   }
   const purpose = arg("purpose") ?? DEFAULT_PURPOSE;
   const context = arg("context") ?? null;
+  const customerName = arg("name") ?? null;
   const fields = purpose === PURCHASE_VERIFICATION_PURPOSE ? PURCHASE_VERIFICATION_FIELDS : DEFAULT_INTAKE_FIELDS;
 
   const vapi = new VapiClient({ token: requiredEnv("VAPI_API_KEY") });
@@ -46,7 +47,7 @@ async function main() {
     assistantId,
     phoneNumberId,
     customer: { number: to },
-    assistantOverrides: callOverrides({ purpose, fields, context }),
+    assistantOverrides: callOverrides({ purpose, fields, context, customerName }),
   });
   if (!("id" in created)) {
     throw new Error("Unexpected batch response from Vapi for a single-customer call.");
