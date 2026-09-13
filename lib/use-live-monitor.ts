@@ -102,9 +102,18 @@ export function useLiveMonitor(verify: (blob: Blob) => Promise<{ score: number; 
           const history = scoreHistoryRef.current;
           history.push(result.score);
           if (history.length > SCORE_HISTORY_SIZE) history.shift();
-          const average = history.reduce((a, b) => a + b, 0) / history.length;
 
-          setStatus(average >= result.threshold ? "match" : "mismatch");
+          if (result.score >= result.threshold) {
+            // Quick to reassure: one clear match clears an alarm
+            // immediately, rather than waiting for a rolling average to
+            // recover from a single bad window still sitting in it.
+            setStatus("match");
+          } else {
+            // Slow to alarm: only flag "mismatch" once the recent
+            // average — not just one noisy window — is actually low.
+            const average = history.reduce((a, b) => a + b, 0) / history.length;
+            setStatus(average >= result.threshold ? "match" : "mismatch");
+          }
         } catch {
           if (!activeRef.current) break;
           setStatus("error");
