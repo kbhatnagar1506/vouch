@@ -157,14 +157,14 @@ export default function VoicePage() {
 
   const recorder = useVoiceRecorder();
 
-  const verifyChunk = useCallback(async (blob: Blob): Promise<boolean> => {
+  const verifyChunk = useCallback(async (blob: Blob): Promise<{ score: number; threshold: number }> => {
     const form = new FormData();
     form.set("audio", blob, "chunk.webm");
     const res = await fetch("/api/voice/verify", { method: "POST", body: form });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Verification failed");
+    const data: VerifyResult = await res.json();
+    if (!res.ok) throw new Error((data as unknown as { error?: string }).error ?? "Verification failed");
     setLastResult(data);
-    return data.passed as boolean;
+    return { score: data.speaker.score, threshold: data.speaker.threshold };
   }, []);
 
   const monitor = useLiveMonitor(verifyChunk);

@@ -17,14 +17,23 @@ const CHUNK_MS = 4500;
 // flip to a spurious mismatch instead of just holding the last real state.
 const SILENCE_PEAK_THRESHOLD = 0.06;
 
+// Raw cosine-similarity scores from a single 4.5s window against one
+// enrollment embedding are noisier than they look — real testing showed
+// the same speaker scoring anywhere from 0.09 to 0.61 across consecutive
+// windows in one session (this checkpoint isn't fine-tuned or
+// score-normalized). Averaging the last few scores before comparing to
+// the threshold smooths that out far better than reacting to each raw
+// window individually.
+const SCORE_HISTORY_SIZE = 3;
+
 /**
  * Continuously samples the mic in short windows and calls `verify` on any
  * window that actually contains speech (cheap client-side amplitude gate,
- * not real VAD, but enough to ignore silence). Status flips to "match"/
- * "mismatch" based on the result of each spoken chunk and holds through
- * silence in between.
+ * not real VAD, but enough to ignore silence). Status is driven by a
+ * rolling average of the last few speaker-match scores, not any single
+ * window, and holds through silence in between.
  */
-export function useLiveMonitor(verify: (blob: Blob) => Promise<boolean>) {
+export function useLiveMonitor(verify: (blob: Blob) => Promise<{ score: number; threshold: number }>) {
   const [status, setStatus] = useState<LiveStatus>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +41,7 @@ export function useLiveMonitor(verify: (blob: Blob) => Promise<boolean>) {
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const scoreHistoryRef = useRef<number[]>([]);
 
   const recordWindow = useCallback((stream: MediaStream): Promise<{ blob: Blob | null; peak: number }> => {
     return new Promise((resolve) => {
@@ -68,10 +78,7 @@ export function useLiveMonitor(verify: (blob: Blob) => Promise<boolean>) {
 
   const loop = useCallback(
     async (stream: MediaStream) => {
-      // Quick to reassure (flip green on the first match), slower to
-      // alarm (two mismatches in a row) — a single noisy window
-      // shouldn't trigger a false "different voice" alert on its own.
-      let consecutiveMismatches = 0;
+      scoreHistoryRef.current = [];
 
       while (activeRef.current) {
         const { blob, peak } = await recordWindow(stream);
@@ -83,15 +90,15 @@ export function useLiveMonitor(verify: (blob: Blob) => Promise<boolean>) {
         }
 
         try {
-          const match = await verify(blob);
+          const { score, threshold } = await verify(blob);
           if (!activeRef.current) break;
-          if (match) {
-            consecutiveMismatches = 0;
-            setStatus("match");
-          } else {
-            consecutiveMismatches += 1;
-            if (consecutiveMismatches >= 2) setStatus("mismatch");
-          }
+
+          const history = scoreHistoryRef.current;
+          history.push(score);
+          if (history.length > SCORE_HISTORY_SIZE) history.shift();
+          const average = history.reduce((a, b) => a + b, 0) / history.length;
+
+          setStatus(average >= threshold ? "match" : "mismatch");
         } catch {
           if (!activeRef.current) break;
           setStatus("error");
@@ -130,6 +137,7 @@ export function useLiveMonitor(verify: (blob: Blob) => Promise<boolean>) {
     audioContextRef.current?.close().catch(() => {});
     audioContextRef.current = null;
     analyserRef.current = null;
+    scoreHistoryRef.current = [];
     setStatus("idle");
   }, []);
 
