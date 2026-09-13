@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
+import Link from "next/link";
 import { exchangePublicToken, LINK_TOKEN_STORAGE_KEY } from "@/lib/plaid-client-exchange";
+
+// Next step in the onboarding chain once a bank account is connected.
+const VOICE_REGISTER_URL = process.env.NEXT_PUBLIC_VOICE_REGISTER_URL ?? "https://voice.getvouch.club/voice/register";
 
 interface Account {
   account_id: string;
@@ -114,29 +118,38 @@ export default function BankPage() {
           <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No accounts connected yet.</p>
         )}
         {accounts.length > 0 && (
-          <div className="space-y-2">
-            {accounts.map((account) => (
-              <div
-                key={account.account_id}
-                className="flex items-center justify-between rounded-xl bg-slate-50 p-4 text-sm"
-              >
-                <div>
-                  <div className="font-semibold text-slate-900">{account.institution_name}</div>
-                  <div className="text-slate-500">
-                    {account.name} ····{account.mask}
+          <>
+            <div className="space-y-2">
+              {accounts.map((account) => (
+                <div
+                  key={account.account_id}
+                  className="flex items-center justify-between rounded-xl bg-slate-50 p-4 text-sm"
+                >
+                  <div>
+                    <div className="font-semibold text-slate-900">{account.institution_name}</div>
+                    <div className="text-slate-500">
+                      {account.name} ····{account.mask}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium text-slate-900">
+                      {account.current_balance != null
+                        ? `${account.current_balance} ${account.iso_currency_code ?? ""}`
+                        : "—"}
+                    </div>
+                    <div className="text-slate-500">{account.transaction_count} transactions</div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-medium text-slate-900">
-                    {account.current_balance != null
-                      ? `${account.current_balance} ${account.iso_currency_code ?? ""}`
-                      : "—"}
-                  </div>
-                  <div className="text-slate-500">{account.transaction_count} transactions</div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+
+            <Link
+              href={VOICE_REGISTER_URL}
+              className="mt-6 block w-full rounded-[10px] bg-blue-600 py-3 text-center text-[15px] font-bold text-white transition hover:brightness-110"
+            >
+              Continue
+            </Link>
+          </>
         )}
       </div>
     </div>
