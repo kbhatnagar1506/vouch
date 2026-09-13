@@ -175,7 +175,7 @@ function modelConfig(messages: Vapi.OpenAiMessage[]): Vapi.CreateAssistantDtoMod
   return { provider, model, messages, temperature: 0.3 } as Vapi.CreateAssistantDtoModel;
 }
 
-// ElevenLabs' "Brian — Deep, Resonant and Comforting". Must be a **premade**
+// ElevenLabs' "George — Warm, Captivating Storyteller". Must be a **premade**
 // voice, not a Voice Library ("professional") one: a library voice 402s with
 // `paid_plan_required` — "Free users cannot use library voices via the API" —
 // which Vapi surfaces only as the opaque
@@ -191,7 +191,7 @@ function modelConfig(messages: Vapi.OpenAiMessage[]): Vapi.CreateAssistantDtoMod
 // go in ELEVENLABS_VOICE_ID without touching this file. Either way the agent
 // still introduces itself as AGENT_NAME above — the persona's name is in the
 // prompt and is independent of which voice speaks it.
-const DEFAULT_ELEVENLABS_VOICE_ID = "nPczCjzI2devNBz1zQrb";
+const DEFAULT_ELEVENLABS_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
 
 function voiceConfig(): Vapi.CreateAssistantDtoVoice {
   return {
@@ -199,7 +199,11 @@ function voiceConfig(): Vapi.CreateAssistantDtoVoice {
     voiceId: process.env.ELEVENLABS_VOICE_ID || DEFAULT_ELEVENLABS_VOICE_ID,
     // Pinned rather than left to Vapi's default so a provider-side default
     // change can't silently pick a model this plan can't synthesize with.
-    model: "eleven_turbo_v2_5",
+    // multilingual_v2 over turbo_v2_5: turbo is the low-latency option and
+    // sounded flat/robotic on a real call. This is ~200-400ms slower per
+    // response, which on a phone call is a slightly longer pause before the
+    // agent speaks — worth it, since the agent talks in short turns anyway.
+    model: "eleven_multilingual_v2",
   };
 }
 
