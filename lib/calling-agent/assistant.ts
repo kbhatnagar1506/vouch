@@ -86,6 +86,18 @@ export function intakeSchema(fields: IntakeField[]): Vapi.JsonSchema {
   };
 }
 
+// Spoken immediately on connect (firstMessageMode: "assistant-speaks-first"
+// below) rather than left for the model to generate on its first turn —
+// without this, the call opens in silence until the model produces a
+// response, which reads as dead air and gets hung up on.
+function buildFirstMessage(purpose: string, customerName?: string | null): string {
+  const name = customerName || "there";
+  if (purpose === PURCHASE_VERIFICATION_PURPOSE) {
+    return `Hi ${name}, this is Vouch calling to quickly verify a recent purchase on your account — do you have a minute?`;
+  }
+  return `Hi ${name}, this is Vouch calling to follow up on your account setup — do you have a minute?`;
+}
+
 function buildSystemPrompt(purpose: string, fields: IntakeField[], customerName?: string | null, context?: string | null): string {
   const fieldLines = fields.map((f) => `- ${f.label}: ${f.description}`).join("\n");
   return [
@@ -157,6 +169,8 @@ export function baseAssistantConfig(): Vapi.CreateAssistantDto {
     name: ASSISTANT_NAME,
     model: modelConfig([{ role: "system", content: buildSystemPrompt(DEFAULT_PURPOSE, DEFAULT_INTAKE_FIELDS) }]),
     voice: voiceConfig(),
+    firstMessage: buildFirstMessage(DEFAULT_PURPOSE),
+    firstMessageMode: "assistant-speaks-first",
     voicemailDetection: voicemailDetectionConfig(),
     server: serverConfig(),
     analysisPlan: { structuredDataPlan: structuredDataPlan(DEFAULT_INTAKE_FIELDS) },
@@ -192,6 +206,8 @@ export function callOverrides({
 }: CallOverridesOptions): Vapi.AssistantOverrides {
   return {
     model: modelConfig([{ role: "system", content: buildSystemPrompt(purpose, fields, customerName, context) }]),
+    firstMessage: buildFirstMessage(purpose, customerName),
+    firstMessageMode: "assistant-speaks-first",
     analysisPlan: { structuredDataPlan: structuredDataPlan(fields) },
   };
 }

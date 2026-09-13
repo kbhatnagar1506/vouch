@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "node --env-file=.env scripts/migrate.mjs",
-    "calling-agent:sync-assistant": "node --env-file=.env --import tsx scripts/calling-agent/sync-assistant.ts"
+    "calling-agent:sync-assistant": "node --env-file=.env --import tsx scripts/calling-agent/sync-assistant.ts",
+    "calling-agent:test-call": "node --env-file=.env --import tsx scripts/calling-agent/place-test-call.ts"
   },
   "dependencies": {
     "next": "15.5.25",
