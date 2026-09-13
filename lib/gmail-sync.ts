@@ -315,19 +315,27 @@ export async function syncGmailForUser(
       result.imported += 1;
       result.classified += 1;
 
-      await writeToMemory(
-        userId,
-        gmailMessageId,
-        { bodyText, merchant, amountCents, receivedAt, categoryKey: match.key, similarity: match.similarity },
-        result,
-      );
-
-      await writeToBackboard(
-        userId,
-        gmailMessageId,
-        { bodyText, merchant, amountCents, categoryKey: match.key, similarity: match.similarity },
-        result,
-      );
+      // Classification (the "filter system") has to finish first -- both
+      // writes below tag themselves with its output (categoryKey/similarity).
+      // But the two writes are independent of each other (different
+      // systems, different failure modes, each already self-contained and
+      // non-fatal -- see writeToMemory/writeToBackboard above), so running
+      // them concurrently instead of one-after-another is free concurrency
+      // that meaningfully speeds up a first sync's few hundred messages.
+      await Promise.all([
+        writeToMemory(
+          userId,
+          gmailMessageId,
+          { bodyText, merchant, amountCents, receivedAt, categoryKey: match.key, similarity: match.similarity },
+          result,
+        ),
+        writeToBackboard(
+          userId,
+          gmailMessageId,
+          { bodyText, merchant, amountCents, categoryKey: match.key, similarity: match.similarity },
+          result,
+        ),
+      ]);
     } catch (err) {
       result.errors.push({
         gmailMessageId,
