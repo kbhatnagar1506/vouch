@@ -127,8 +127,19 @@ gcloud run deploy vouch-voice-inference \
   --region us-central1 \
   --no-allow-unauthenticated \
   --set-env-vars VOICE_SERVICE_API_KEY=<same value as this branch's VOICE_SERVICE_API_KEY> \
-  --memory 4Gi --cpu 2
+  --memory 4Gi --cpu 2 \
+  --min-instances 1 \
+  --startup-probe httpGet.path=/health,initialDelaySeconds=0,timeoutSeconds=3,periodSeconds=3,failureThreshold=30
 ```
+
+`--min-instances 1` keeps one instance warm at all times (Cloud Run
+otherwise scales to zero when idle) — at 2 vCPU/4GB that's roughly
+$15-30/month of ongoing cost, traded for never making a real user wait out
+a cold start. The model itself is loaded once at process startup
+(`app/main.py`'s `preload_models`), and `--startup-probe` makes Cloud Run
+withhold traffic from a new instance until `/health` reports the model is
+actually loaded — so even a fresh deploy's first real request is fast,
+not just the second one.
 
 `lib/voice-service.ts` mints a Google-signed ID token from
 `GCP_VOICE_CALLER_KEY_BASE64` (via `google-auth-library`) for every call —

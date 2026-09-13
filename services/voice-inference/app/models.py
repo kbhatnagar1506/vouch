@@ -32,6 +32,10 @@ _speaker_model = None
 _speaker_model_lock = threading.Lock()
 
 
+def is_speaker_model_loaded() -> bool:
+    return _speaker_model is not None
+
+
 def get_speaker_model():
     global _speaker_model
     if _speaker_model is None:

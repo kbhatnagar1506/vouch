@@ -23,8 +23,20 @@ def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
+@app.on_event("startup")
+def preload_models() -> None:
+    # Loads the speaker model into memory once at process start, rather
+    # than lazily on the first request — combined with a Cloud Run startup
+    # probe against /health (see docs/VOICE.md), this keeps a freshly
+    # started instance out of traffic rotation until it's actually ready,
+    # so no real request ever pays the ~10s model-load cost.
+    models.get_speaker_model()
+
+
 @app.get("/health")
 def health():
+    if not models.is_speaker_model_loaded():
+        raise HTTPException(status_code=503, detail="Model still loading")
     return {"ok": True}
 
 
