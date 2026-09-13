@@ -7,7 +7,10 @@ import Link from "next/link";
 import { exchangePublicToken, LINK_TOKEN_STORAGE_KEY } from "@/lib/plaid-client-exchange";
 
 // Next step in the onboarding chain once a bank account is connected.
-const VOICE_REGISTER_URL = process.env.NEXT_PUBLIC_VOICE_REGISTER_URL ?? "https://voice.getvouch.club/voice/register";
+// Next step in the chain: login -> Gmail -> here -> Stripe/cards -> voice
+// -> dashboard. Was pointing straight at the voice step, which skipped the
+// Stripe step entirely.
+const CARDS_URL = process.env.NEXT_PUBLIC_CARDS_URL ?? "https://cards.getvouch.club/cards";
 
 interface Account {
   account_id: string;
@@ -111,14 +114,12 @@ export default function BankPage() {
         {status && <p className="mt-2 text-sm text-slate-600">{status}</p>}
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
-        {accounts.length === 0 && (
-          <Link
-            href={VOICE_REGISTER_URL}
-            className="mt-3 block w-full text-center text-[13.5px] font-semibold text-slate-500 transition hover:text-slate-700"
-          >
-            Skip for now
-          </Link>
-        )}
+        <Link
+          href={CARDS_URL}
+          className="mt-3 block w-full text-center text-[13.5px] font-semibold text-slate-500 transition hover:text-slate-700"
+        >
+          Skip for now
+        </Link>
 
         <h2 className="mt-8 mb-3 text-[13px] font-semibold uppercase tracking-wide text-slate-500">
           Connected accounts
@@ -153,7 +154,7 @@ export default function BankPage() {
             </div>
 
             <Link
-              href={VOICE_REGISTER_URL}
+              href={CARDS_URL}
               className="mt-6 block w-full rounded-[10px] bg-blue-600 py-3 text-center text-[15px] font-bold text-white transition hover:brightness-110"
             >
               Continue
