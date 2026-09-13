@@ -1,0 +1,286 @@
+import type { Vapi } from "@vapi-ai/server-sdk";
+import { WEBHOOK_SECRET_HEADER } from "@/lib/calling-agent/webhook-auth";
+
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is not set. See docs/CALLING_AGENT.md for setup.`);
+  }
+  return value;
+}
+
+// The one assistant this branch manages, upserted by name (see
+// scripts/calling-agent/sync-assistant.ts) rather than a separate
+// assistant per call purpose — per-call differences (what to ask about,
+// who we're calling) are passed as `assistantOverrides` on the call itself
+// (see callOverrides() below), not baked into the saved assistant.
+export const ASSISTANT_NAME = "vouch-calling-agent";
+
+export interface IntakeField {
+  key: string;
+  label: string;
+  description: string;
+  type: "string" | "number" | "boolean";
+}
+
+export const DEFAULT_PURPOSE = "onboarding_profile";
+
+// Mirrors the portal branch's `user_profiles` table
+// (migrations/003_create_user_profiles.sql) — the calling agent's default
+// job is confirming/collecting exactly these onboarding fields by phone.
+// POST /api/calling-agent/calls can pass its own `purpose` + `fields` for
+// a different kind of call entirely; this is just the out-of-the-box one.
+export const DEFAULT_INTAKE_FIELDS: IntakeField[] = [
+  { key: "age", label: "Age", description: "The customer's age in years.", type: "number" },
+  {
+    key: "phone_number",
+    label: "Phone number",
+    description: "A good callback number for the customer, in E.164 format if possible.",
+    type: "string",
+  },
+  { key: "address_street", label: "Street address", description: "Street address, including house/unit number.", type: "string" },
+  { key: "address_city", label: "City", description: "City of residence.", type: "string" },
+  { key: "address_state", label: "State", description: "State of residence (2-letter code for US addresses).", type: "string" },
+  { key: "address_zip", label: "ZIP / postal code", description: "Postal code of residence.", type: "string" },
+  {
+    key: "employment_status",
+    label: "Employment status",
+    description: "e.g. employed, self-employed, student, unemployed, retired.",
+    type: "string",
+  },
+  { key: "income_range", label: "Income range", description: "Approximate annual income range, in the customer's own words.", type: "string" },
+  { key: "financial_goal", label: "Financial goal", description: "What the customer is trying to achieve on Vouch.", type: "string" },
+];
+
+export const PURCHASE_VERIFICATION_PURPOSE = "purchase_verification";
+
+// A second preset: confirming a specific purchase/transaction with the
+// cardholder before (or right after) it goes through — the phone-call
+// equivalent of a bank's "did you just try to spend $X at Y?" fraud check.
+// Pass the actual transaction details (merchant, amount, card) as `context`
+// on the call (see CallOverridesOptions) — these fields just capture the
+// verdict, not the transaction itself.
+export const PURCHASE_VERIFICATION_FIELDS: IntakeField[] = [
+  {
+    key: "confirmed",
+    label: "Confirmed",
+    description: "true if the customer confirms they personally authorized this specific purchase, false if they say they did not.",
+    type: "boolean",
+  },
+  {
+    key: "concern_reason",
+    label: "Concern reason",
+    description:
+      "If not confirmed, or the customer sounds unsure/concerned, a brief note why (e.g. 'doesn't recognize merchant', 'says card was lost'). Empty string if confirmed with no concerns.",
+    type: "string",
+  },
+];
+
+export function intakeSchema(fields: IntakeField[]): Vapi.JsonSchema {
+  return {
+    type: "object",
+    properties: Object.fromEntries(
+      fields.map((f): [string, Vapi.JsonSchema] => [f.key, { type: f.type, description: f.description }]),
+    ),
+    required: fields.map((f) => f.key),
+  };
+}
+
+// A live test call had the model say the literal words "my name is agent
+// name" — asked to "introduce yourself by name" with no actual name given,
+// it treated "agent name" as the value to fill in. Giving the persona a
+// real fixed name fixes both that and the first message below.
+const AGENT_NAME = "Hale";
+
+// Server clock, not the callee's local time -- there's no per-user
+// timezone on file to do better than this today. Close enough for a
+// "good morning/afternoon/evening" greeting; worth revisiting if a real
+// timezone ever gets attached to a user.
+function timeOfDayGreeting(now: Date = new Date()): "morning" | "afternoon" | "evening" {
+  const hour = now.getUTCHours();
+  if (hour < 12) return "morning";
+  if (hour < 18) return "afternoon";
+  return "evening";
+}
+
+// Spoken immediately on connect (firstMessageMode: "assistant-speaks-first"
+// below) rather than left for the model to generate on its first turn —
+// without this, the call opens in silence until the model produces a
+// response, which reads as dead air and gets hung up on. Always opens with
+// a time-of-day greeting and asks how they're doing -- buildSystemPrompt
+// below tells the model what to do with the answer.
+function buildFirstMessage(purpose: string, customerName?: string | null): string {
+  const timeGreeting = `Good ${timeOfDayGreeting()}${customerName ? `, ${customerName}` : ""}`;
+  const reason =
+    purpose === PURCHASE_VERIFICATION_PURPOSE
+      ? "to quickly go over a recent purchase on your account"
+      : "to follow up on your account setup";
+  return `${timeGreeting}! This is ${AGENT_NAME} calling from Vouch ${reason}. How are you doing today?`;
+}
+
+function buildSystemPrompt(purpose: string, fields: IntakeField[], customerName?: string | null, context?: string | null): string {
+  const fieldLines = fields.map((f) => `- ${f.label}: ${f.description}`).join("\n");
+  // Same bug in reverse: without a real customerName, telling the model to
+  // "confirm you're speaking with the right person" gave it nothing to
+  // confirm and it garbled trying anyway — so branch on whether one exists.
+  const identityCheck = customerName
+    ? `Confirm you're speaking with ${customerName} before asking anything else.`
+    : `Ask for the caller's name so you can confirm you're speaking with the right person before asking anything else.`;
+  // Not a live biometric check -- see docs/CALLING_AGENT.md "Human
+  // detection" for the real speaker-match, which only runs after the call
+  // ends (it needs the full recording). This is the conversational,
+  // in-the-moment fallback: if the person on the line contradicts being
+  // customerName, the model can act on that immediately without waiting
+  // for a post-call analysis that arrives too late to matter.
+  const identityMismatchHandling = customerName
+    ? `If at any point it becomes clear you are NOT actually speaking with ${customerName} — they say it's the wrong person, seem unfamiliar with having a Vouch account, or explicitly say they're someone else — stop what you're doing and say plainly: "It looks like I'm not speaking with ${customerName} — could you please hand the phone to them?" Then end the call. Do not continue collecting information, discussing payment details, or asking for confirmations from anyone who isn't confirmed to be ${customerName}.`
+    : null;
+
+  const conversationFlow =
+    purpose === PURCHASE_VERIFICATION_PURPOSE
+      ? [
+          `Conversation shape for this call, in order:`,
+          `1. You already opened with a time-of-day greeting and asked how they're doing (see your first message) — wait for their answer before moving on.`,
+          `2. If they ask how YOU'RE doing in return, answer briefly and warmly (e.g. "I'm doing great, thanks for asking!") before continuing. If they don't ask, don't wait for it or ask a second time — just move straight on.`,
+          `3. Give a short, plain-language summary of this month's payment activity on their account.`,
+          `4. Right after that, naturally work in relevant past payment/subscription history — said conversationally, not read out as a list. Use the "Relevant payment history" context below if it's present; if it's empty, skip this step rather than inventing history you don't have.`,
+          `5. Then gently ask about the specific thing this call is about (see the context below) — a renewal, a reminder, or a general check-in on their monthly payments. Keep it low-pressure: this is a gentle nudge, not a hard sell or an interrogation, and their answer maps to the fields you're collecting below.`,
+        ].join("\n")
+      : null;
+
+  return [
+    `You are ${AGENT_NAME}, Vouch's calling agent, phoning ${customerName || "a Vouch user"} on behalf of the Vouch platform.`,
+    `Start by introducing yourself by name and company. ${identityCheck}`,
+    identityMismatchHandling,
+    conversationFlow,
+    context ? `Specific context for this call:\n${context}` : null,
+    `Your job for this call (purpose: "${purpose}") is to collect the following information through natural conversation — do not read it like a form, ask one thing at a time, and briefly acknowledge each answer before moving on:`,
+    fieldLines,
+    `Keep turns short — this is a phone call, not a chat. If the person seems confused, asks to be called back, or declines, politely wrap up and end the call rather than pushing for an answer.`,
+    `If you reach voicemail or an answering machine, leave a brief callback message and end the call — don't try to collect information from a recording.`,
+    `When you've collected everything (or the person has declined to continue), thank them and end the call.`,
+  ]
+    .filter((line): line is string => line != null)
+    .join("\n\n");
+}
+
+// Any Vapi-supported model provider works here (anthropic, openai, xai,
+// together-ai, …) — this just needs {provider, model} in the same shape.
+// Defaults to Gemini per the project's current priority; override with
+// CALLING_AGENT_MODEL_PROVIDER / CALLING_AGENT_MODEL without touching code.
+// Valid model ids per provider: https://docs.vapi.ai/providers/model
+function modelConfig(messages: Vapi.OpenAiMessage[]): Vapi.CreateAssistantDtoModel {
+  const provider = process.env.CALLING_AGENT_MODEL_PROVIDER ?? "google";
+  const model = process.env.CALLING_AGENT_MODEL ?? "gemini-2.5-flash";
+  return { provider, model, messages, temperature: 0.3 } as Vapi.CreateAssistantDtoModel;
+}
+
+// ElevenLabs' "George — Warm, Captivating Storyteller". Must be a **premade**
+// voice, not a Voice Library ("professional") one: a library voice 402s with
+// `paid_plan_required` — "Free users cannot use library voices via the API" —
+// which Vapi surfaces only as the opaque
+// pipeline-error-eleven-labs-voice-failed, killing the call ~5 seconds in
+// with no transcript. That's what the previous default here ("Hale",
+// wWWn96OtTHu1sn8SRGEr) hit: it IS on the account and GET /v1/voices lists
+// it, so presence checks pass — it's the *plan*, not the voice id, that
+// blocks it. Confirmed by synthesizing directly against both:
+// Hale -> HTTP 402, Brian -> HTTP 200.
+//
+// So: on the free tier, only voices with category "premade" work. Upgrading
+// the ElevenLabs plan re-opens the library ones, at which point any id can
+// go in ELEVENLABS_VOICE_ID without touching this file. Either way the agent
+// still introduces itself as AGENT_NAME above — the persona's name is in the
+// prompt and is independent of which voice speaks it.
+const DEFAULT_ELEVENLABS_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
+
+function voiceConfig(): Vapi.CreateAssistantDtoVoice {
+  return {
+    provider: "11labs",
+    voiceId: process.env.ELEVENLABS_VOICE_ID || DEFAULT_ELEVENLABS_VOICE_ID,
+    // Pinned rather than left to Vapi's default so a provider-side default
+    // change can't silently pick a model this plan can't synthesize with.
+    // multilingual_v2 over turbo_v2_5: turbo is the low-latency option and
+    // sounded flat/robotic on a real call. This is ~200-400ms slower per
+    // response, which on a phone call is a slightly longer pause before the
+    // agent speaks — worth it, since the agent talks in short turns anyway.
+    model: "eleven_multilingual_v2",
+  };
+}
+
+// Vapi's own voicemail/IVR classifier — used as the interim human-detection
+// signal (see lib/calling-agent/human-detection.ts) until the real model is
+// wired in. Not a liveness/anti-spoofing check.
+function voicemailDetectionConfig(): Vapi.CreateAssistantDtoVoicemailDetection {
+  return { provider: "vapi" };
+}
+
+// Vapi has no inline `server.secret` anymore (see
+// lib/calling-agent/webhook-auth.ts) — a plain header serves the same
+// purpose and stays fully code-settable.
+function serverConfig(): Vapi.Server | undefined {
+  const url = process.env.CALLING_AGENT_WEBHOOK_URL;
+  if (!url) return undefined;
+  return {
+    url,
+    headers: { [WEBHOOK_SECRET_HEADER]: requiredEnv("CALLING_AGENT_WEBHOOK_SECRET") },
+  };
+}
+
+function structuredDataPlan(fields: IntakeField[]): Vapi.StructuredDataPlan {
+  return { enabled: true, schema: intakeSchema(fields) };
+}
+
+/**
+ * The persistent assistant config — voice/model/transcriber/webhook, the
+ * parts that don't change call-to-call. Used by
+ * scripts/calling-agent/sync-assistant.ts to create/update the one saved
+ * assistant. Per-call specifics (who we're calling, what to ask) are NOT
+ * here — see callOverrides() below.
+ */
+export function baseAssistantConfig(): Vapi.CreateAssistantDto {
+  return {
+    name: ASSISTANT_NAME,
+    model: modelConfig([{ role: "system", content: buildSystemPrompt(DEFAULT_PURPOSE, DEFAULT_INTAKE_FIELDS) }]),
+    voice: voiceConfig(),
+    firstMessage: buildFirstMessage(DEFAULT_PURPOSE),
+    firstMessageMode: "assistant-speaks-first",
+    voicemailDetection: voicemailDetectionConfig(),
+    server: serverConfig(),
+    analysisPlan: { structuredDataPlan: structuredDataPlan(DEFAULT_INTAKE_FIELDS) },
+    maxDurationSeconds: 600,
+  };
+}
+
+export interface CallOverridesOptions {
+  purpose?: string;
+  fields?: IntakeField[];
+  customerName?: string | null;
+  /**
+   * Free-text detail specific to this one call — e.g. for
+   * PURCHASE_VERIFICATION_PURPOSE, the actual transaction: "a $42.50 charge
+   * at Acme Hardware on the card ending 1234, made 3 minutes ago." Without
+   * this the agent knows the *shape* of what to ask (the fields) but not
+   * the specifics of *this* call.
+   */
+  context?: string | null;
+}
+
+/**
+ * Per-call overrides layered onto the saved assistant (via
+ * CreateCallDto.assistantOverrides) — lets one assistant handle many kinds
+ * of calls (different purpose, different fields to collect, personalized
+ * greeting) without creating a new Vapi assistant per call.
+ */
+export function callOverrides({
+  purpose = DEFAULT_PURPOSE,
+  fields = DEFAULT_INTAKE_FIELDS,
+  customerName,
+  context,
+}: CallOverridesOptions): Vapi.AssistantOverrides {
+  return {
+    model: modelConfig([{ role: "system", content: buildSystemPrompt(purpose, fields, customerName, context) }]),
+    firstMessage: buildFirstMessage(purpose, customerName),
+    firstMessageMode: "assistant-speaks-first",
+    analysisPlan: { structuredDataPlan: structuredDataPlan(fields) },
+  };
+}

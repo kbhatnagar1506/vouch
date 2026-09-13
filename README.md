@@ -25,6 +25,16 @@ really you before it spends a cent.
 
 ---
 
+> **You're on `main`, which is a reading branch.** It isn't deployed anywhere.
+> Every service's full source is snapshotted under [`services/`](services/) so
+> the whole system can be read without checking out eight branches, and
+> [`services/README.md`](services/README.md) points at the files worth reading
+> first. The service branches are the source of truth and the only thing that
+> ships.
+>
+> Also here: [`ARCHITECTURE.md`](ARCHITECTURE.md) for the deeper technical
+> walkthrough, and [`DEVPOST.md`](DEVPOST.md) for the submission write-up.
+
 ## What it actually does
 
 1. **Connect Gmail.** Receipts and renewal notices are pulled, embedded,
@@ -106,13 +116,13 @@ session on all of them — cross-service calls just forward it server-side.
 |---|---|---|---|
 | `claude/vigilant-meitner-fxqi9c` | — | production base | this file |
 | `portal` | `login` | signup/login, issues the session | — |
-| `gmail-connector` | `gmail` | Gmail sync, embeddings, classification, memory | [GMAIL.md](https://github.com/kbhatnagar1506/vouch/blob/gmail-connector/docs/GMAIL.md) |
-| `bank-connection` | `bankconnection` | Plaid link, accounts, balances | [PLAID.md](https://github.com/kbhatnagar1506/vouch/blob/bank-connection/docs/PLAID.md) |
-| `card-issuing` | `cards` | Stripe Issuing, webhooks, **MCP server** | [CARDS.md](https://github.com/kbhatnagar1506/vouch/blob/card-issuing/docs/CARDS.md) |
-| `voice-verification` | `voice` | voice enrollment + speaker matching | [VOICE.md](https://github.com/kbhatnagar1506/vouch/blob/voice-verification/docs/VOICE.md) |
-| `identity-verification` | `identity` | Persona ID + selfie, the voice binding | [IDENTITY.md](https://github.com/kbhatnagar1506/vouch/blob/identity-verification/docs/IDENTITY.md) |
-| `calling-agent` | `callingagent` | outbound voice calls | [CALLING_AGENT.md](https://github.com/kbhatnagar1506/vouch/blob/calling-agent/docs/CALLING_AGENT.md) |
-| `dashboard` | `dashboard` | the real dashboard + `/demo` | [DASHBOARD.md](https://github.com/kbhatnagar1506/vouch/blob/dashboard/docs/DASHBOARD.md) |
+| `gmail-connector` | `gmail` | Gmail sync, embeddings, classification, memory | [GMAIL.md](services/gmail-connector/docs/GMAIL.md) |
+| `bank-connection` | `bankconnection` | Plaid link, accounts, balances | [PLAID.md](services/bank-connection/docs/PLAID.md) |
+| `card-issuing` | `cards` | Stripe Issuing, webhooks, **MCP server** | [CARDS.md](services/card-issuing/docs/CARDS.md) |
+| `voice-verification` | `voice` | voice enrollment + speaker matching | [VOICE.md](services/voice-verification/docs/VOICE.md) |
+| `identity-verification` | `identity` | Persona ID + selfie, the voice binding | [IDENTITY.md](services/identity-verification/docs/IDENTITY.md) |
+| `calling-agent` | `callingagent` | outbound voice calls | [CALLING_AGENT.md](services/calling-agent/docs/CALLING_AGENT.md) |
+| `dashboard` | `dashboard` | the real dashboard + `/demo` | [DASHBOARD.md](services/dashboard/docs/DASHBOARD.md) |
 
 ## The MCP server
 
