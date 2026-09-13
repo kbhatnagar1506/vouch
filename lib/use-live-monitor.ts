@@ -4,7 +4,14 @@ import { useCallback, useRef, useState } from "react";
 
 export type LiveStatus = "idle" | "listening" | "match" | "mismatch" | "error";
 
-const CHUNK_MS = 2200;
+// ECAPA-TDNN needs a few seconds of clean speech to embed reliably —
+// sub-2s clips are a known hard case for speaker verification (higher
+// EER), and each chunk also pays an opus-encoder warm-up cost at the
+// start of a fresh MediaRecorder instance, which eats further into an
+// already-short window. 2.2s was producing wildly unreliable scores
+// (18% same-speaker similarity) in real testing; 4.5s trades reaction
+// time for accuracy.
+const CHUNK_MS = 4500;
 // Below this peak amplitude a chunk is treated as silence and skipped —
 // without this, a silent window would still get sent to /verify and could
 // flip to a spurious mismatch instead of just holding the last real state.
@@ -61,6 +68,11 @@ export function useLiveMonitor(verify: (blob: Blob) => Promise<boolean>) {
 
   const loop = useCallback(
     async (stream: MediaStream) => {
+      // Quick to reassure (flip green on the first match), slower to
+      // alarm (two mismatches in a row) — a single noisy window
+      // shouldn't trigger a false "different voice" alert on its own.
+      let consecutiveMismatches = 0;
+
       while (activeRef.current) {
         const { blob, peak } = await recordWindow(stream);
         if (!activeRef.current) break;
@@ -73,7 +85,13 @@ export function useLiveMonitor(verify: (blob: Blob) => Promise<boolean>) {
         try {
           const match = await verify(blob);
           if (!activeRef.current) break;
-          setStatus(match ? "match" : "mismatch");
+          if (match) {
+            consecutiveMismatches = 0;
+            setStatus("match");
+          } else {
+            consecutiveMismatches += 1;
+            if (consecutiveMismatches >= 2) setStatus("mismatch");
+          }
         } catch {
           if (!activeRef.current) break;
           setStatus("error");
