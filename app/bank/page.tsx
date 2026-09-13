@@ -111,6 +111,15 @@ export default function BankPage() {
         {status && <p className="mt-2 text-sm text-slate-600">{status}</p>}
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
+        {accounts.length === 0 && (
+          <Link
+            href={VOICE_REGISTER_URL}
+            className="mt-3 block w-full text-center text-[13.5px] font-semibold text-slate-500 transition hover:text-slate-700"
+          >
+            Skip for now
+          </Link>
+        )}
+
         <h2 className="mt-8 mb-3 text-[13px] font-semibold uppercase tracking-wide text-slate-500">
           Connected accounts
         </h2>
