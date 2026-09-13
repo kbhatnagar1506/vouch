@@ -246,3 +246,43 @@ is exempt (Stripe's servers call it directly, with no session cookie).
 Same Vercel project (`acme-1b76/vouch`), this branch bound to
 `cards.getvouch.club` via Git Branch Domains — see the base `CLAUDE.md`
 "Service branches" section for the general pattern.
+
+## Mock mode (`CARD_ISSUING_MODE=mock`)
+
+This account's Stripe Issuing **Financial Account is stuck in `pending`**.
+Stripe refuses every card creation against it —
+
+> You cannot create a new card for FinancialAccount `fa_test_…` because its
+> status is pending. Please try again with an open FinancialAccount.
+
+— which makes everything downstream of a card (simulate_purchase, the
+webhook, transactions on the dashboard) impossible to exercise at all.
+
+Setting `CARD_ISSUING_MODE=mock` swaps Stripe out for `lib/card-mock.ts`
+and leaves the rest of the system untouched:
+
+- Mock cards are ordinary `issued_cards` rows, marked by an `ic_mock_`
+  `stripe_card_id`. List, freeze, unfreeze, cancel, the dashboard, and the
+  transactions table are all DB-backed and need no knowledge of mock mode —
+  only the four functions in `lib/stripe.ts` that actually call Stripe
+  branch, so a mock and a real card can coexist and each is routed by its
+  own id.
+- `simulate_purchase` applies the same three rules Stripe would: a canceled
+  card declines, a frozen card declines, and an amount over the card's
+  spending limit declines as `spending_controls`. On approval it records the
+  transaction and auto-cancels a single-use card — the bookkeeping the real
+  webhook does on `issuing_transaction.created`, done inline because nothing
+  external fires a webhook for a mock purchase.
+- `create_temporary_card` returns a **card number** in this mode only. It is
+  random digits behind Stripe's well-known `4242` test prefix, it is never
+  persisted, it never reaches a payment network, and it authorizes nothing.
+  A real Stripe card never returns its PAN from the server — that is
+  revealed client-side via an ephemeral key (see "PCI scope").
+
+Default is `live`, so a missing env var can never silently mint fake cards.
+
+Verified end to end against a local Postgres with all five migrations
+applied, driving the deployed tool surface over MCP: create → decline over
+limit → freeze → decline frozen → unfreeze → approve → auto-cancel →
+decline on the dead card, with the transaction landing in
+`card_transactions` and the key's `last_used_at` updating.

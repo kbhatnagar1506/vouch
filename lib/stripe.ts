@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { pool } from "@/lib/db";
+import { createMockCard, isMockCard, isMockIssuing, simulateMockPurchase, type MockCardSecrets } from "@/lib/card-mock";
 import type { User } from "@/lib/auth";
 
 // Pinned explicitly (matching this installed `stripe` package version's
@@ -197,8 +198,31 @@ function getIssuingFinancialAccountId(): string {
   return id;
 }
 
-/** Issues a new virtual card (no physical fulfillment) and records it locally. */
+/**
+ * Issues a new virtual card (no physical fulfillment) and records it locally.
+ *
+ * `secrets` is populated ONLY in mock mode (CARD_ISSUING_MODE=mock), where
+ * the "card number" is random digits that authorize nothing — see
+ * lib/card-mock.ts. A real Stripe card never returns its PAN here: that
+ * stays out of this server entirely and is revealed client-side via an
+ * ephemeral key (see createCardEphemeralKey and docs/CARDS.md "PCI scope").
+ */
+export async function createVirtualCardWithSecrets(
+  user: User,
+  input: CreateCardInput,
+): Promise<{ card: IssuedCard; secrets?: MockCardSecrets }> {
+  if (isMockIssuing()) {
+    const { row, secrets } = await createMockCard(user, input);
+    return { card: rowToCard(row as unknown as IssuedCardRow), secrets };
+  }
+  return { card: await createRealVirtualCard(user, input) };
+}
+
 export async function createVirtualCard(user: User, input: CreateCardInput): Promise<IssuedCard> {
+  return (await createVirtualCardWithSecrets(user, input)).card;
+}
+
+async function createRealVirtualCard(user: User, input: CreateCardInput): Promise<IssuedCard> {
   const stripe = getStripeClient();
   const cardholderId = await ensureCardholder(user, {
     phoneNumber: input.phoneNumber,
@@ -264,8 +288,10 @@ async function updateCardStatus(
     throw new Error("Card not found");
   }
 
-  const stripe = getStripeClient();
-  await stripe.issuing.cards.update(existing.rows[0].stripe_card_id, { status });
+  if (!isMockCard(existing.rows[0].stripe_card_id)) {
+    const stripe = getStripeClient();
+    await stripe.issuing.cards.update(existing.rows[0].stripe_card_id, { status });
+  }
 
   const updated = await pool.query<IssuedCardRow>(
     "update issued_cards set status = $1, updated_at = now() where id = $2 returning *",
@@ -364,8 +390,10 @@ export async function recordCardTransaction(params: {
   }
 
   if (singleUse && status === "active") {
-    const stripe = getStripeClient();
-    await stripe.issuing.cards.update(params.stripeCardId, { status: "canceled" });
+    if (!isMockCard(params.stripeCardId)) {
+      const stripe = getStripeClient();
+      await stripe.issuing.cards.update(params.stripeCardId, { status: "canceled" });
+    }
     await pool.query("update issued_cards set status = 'canceled', updated_at = now() where id = $1", [cardId]);
     return { autoCanceled: true };
   }
@@ -407,6 +435,11 @@ export async function simulatePurchase(userId: string, input: SimulatePurchaseIn
     throw new Error("Card not found");
   }
   const stripeCardId = existing.rows[0].stripe_card_id;
+
+  if (isMockCard(stripeCardId)) {
+    const result = await simulateMockPurchase(userId, input);
+    return { approved: result.approved, authorizationId: result.authorizationId, declineReason: result.declineReason };
+  }
 
   const stripe = getStripeClient();
   const authorization = await stripe.testHelpers.issuing.authorizations.create({

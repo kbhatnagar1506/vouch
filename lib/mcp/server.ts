@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { User } from "@/lib/auth";
 import {
   cancelCard,
-  createVirtualCard,
+  createVirtualCardWithSecrets,
   freezeCard,
   listCards,
   PhoneNumberRequiredError,
@@ -65,11 +65,20 @@ export function buildMcpServer(user: User, termsAcceptanceIp: string): McpServer
           .optional()
           .describe("Required only the first time this user creates a card (Stripe needs it for 3D Secure). Omit on later calls."),
       },
-      outputSchema: { card: z.object(CARD_SHAPE).optional(), phone_required: z.boolean().optional() },
+      outputSchema: {
+        card: z.object(CARD_SHAPE).optional(),
+        phone_required: z.boolean().optional(),
+        // Present only in mock mode (CARD_ISSUING_MODE=mock), where the
+        // number is random digits that authorize nothing. A real Stripe
+        // card never returns its PAN here.
+        card_number: z.string().optional(),
+        cvc: z.string().optional(),
+        mock: z.boolean().optional(),
+      },
     },
     async ({ label, merchant, spending_limit_cents, single_use, phone_number }) => {
       try {
-        const card = await createVirtualCard(user, {
+        const { card, secrets } = await createVirtualCardWithSecrets(user, {
           label,
           merchant,
           spendingLimitCents: spending_limit_cents,
@@ -77,6 +86,17 @@ export function buildMcpServer(user: User, termsAcceptanceIp: string): McpServer
           phoneNumber: phone_number,
           termsAcceptanceIp,
         });
+        if (secrets) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Created card: ${cardText(card)}\nNumber ${secrets.number}  exp ${String(card.expMonth).padStart(2, "0")}/${card.expYear}  CVC ${secrets.cvc}\n(Mock card — Stripe Issuing is not provisioned on this account, so this number is random and authorizes nothing.)`,
+              },
+            ],
+            structuredContent: { card, card_number: secrets.number, cvc: secrets.cvc, mock: true },
+          };
+        }
         return {
           content: [{ type: "text", text: `Created card: ${cardText(card)}` }],
           structuredContent: { card },
