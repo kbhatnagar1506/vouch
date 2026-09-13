@@ -286,3 +286,45 @@ applied, driving the deployed tool surface over MCP: create → decline over
 limit → freeze → decline frozen → unfreeze → approve → auto-cancel →
 decline on the dead card, with the transaction landing in
 `card_transactions` and the key's `last_used_at` updating.
+
+## Connecting an agent (MCP)
+
+`/cards` has an **Agent access** panel: name a key, click Create key, and
+the raw token is shown once (only its hash is stored — see
+`lib/mcp/api-keys.ts`), along with a ready-to-paste install command. Keys
+are listed with their created/last-used dates and can be revoked.
+
+The endpoint is public — it is not behind Vercel's SSO deployment
+protection — and authenticates purely on the bearer token, which is what
+lets an MCP client reach it at all.
+
+**Claude Code:**
+
+```sh
+claude mcp add --transport http vouch-cards \
+  https://cards.getvouch.club/api/mcp \
+  --header "Authorization: Bearer mcpk_..."
+```
+
+The header value is sent verbatim, so the `Bearer ` prefix must be
+included. Check it with `claude mcp list` (or `/mcp` in a session).
+
+**Claude Desktop** — its Connectors UI doesn't take a static bearer token,
+so configure it by hand in `claude_desktop_config.json` and restart:
+
+```json
+{
+  "mcpServers": {
+    "vouch-cards": {
+      "type": "http",
+      "url": "https://cards.getvouch.club/api/mcp",
+      "headers": { "Authorization": "Bearer mcpk_..." }
+    }
+  }
+}
+```
+
+**claude.ai** — custom connectors there generally expect OAuth. Static
+request headers exist but are a gated beta, so if the Add custom connector
+dialog shows no "Request headers" section, this server can't be added on
+the web and Claude Code or Desktop is the way in.

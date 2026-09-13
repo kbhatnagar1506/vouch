@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { CardManager } from "@/components/card-manager";
+import { AgentAccess } from "@/components/agent-access";
 
 // This page doubles as the Stripe step of onboarding (login -> Gmail ->
 // bank -> here -> voice -> dashboard), so it needs somewhere to go next.
@@ -43,6 +44,8 @@ export default function CardsPage() {
         </div>
 
         <CardManager />
+
+        <AgentAccess />
 
         <Link
           href={VOICE_REGISTER_URL}
