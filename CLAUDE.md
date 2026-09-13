@@ -10,6 +10,17 @@ production. `DATABASE_URL` is set as a Production env var in the Vercel
 project — add it to Preview too if preview deploys need DB access (preview
 URLs are also gated by Vercel's SSO-based Deployment Protection by default).
 
+## Gmail connector
+
+The `gmail-connector` branch adds read-only Gmail OAuth as an onboarding
+step (signup/login → Gmail → bank → voice registration) — multi-tenant via
+the same shared session cookie as every other service, no login/signup UI
+here either. Adapted from `aaditisinghal/vouch-aaditi`'s
+`feature/gmail-connector` branch, which she removed before merging her
+login/signup work into `portal` — ported here rather than losing it. See
+`docs/GMAIL.md` for the full setup, what was adapted vs. kept as-is, and
+deployment/subdomain instructions.
+
 ## Service branches (one repo, one DB, per-service subdomain)
 
 This is a single portal built by one person, with each onboarding step
