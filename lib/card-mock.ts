@@ -34,6 +34,31 @@ export function isMockCard(stripeCardId: string): boolean {
   return stripeCardId.startsWith(MOCK_PREFIX);
 }
 
+/**
+ * A fixed demo card, supplied by env rather than written into this file.
+ *
+ * Set MOCK_CARD_NUMBER and every mock issuance returns the same card, which
+ * is what a live demo wants — the same recognisable number on screen each
+ * time instead of a new random one. Unset, each card gets a fresh
+ * 4242-prefixed number.
+ *
+ * Kept as config, not a literal, for one practical reason: a card number in
+ * source is a card number in git history, on GitHub, and in every clone
+ * from then on, and the only way to take it back is rewriting history. In
+ * env it changes with one command and never enters the repo.
+ */
+function fixedCard(): { number: string; cvc: string; expMonth: number; expYear: number } | null {
+  const number = process.env.MOCK_CARD_NUMBER?.replace(/\s+/g, "");
+  if (!number) return null;
+  const now = new Date();
+  return {
+    number,
+    cvc: process.env.MOCK_CARD_CVC ?? "000",
+    expMonth: Number(process.env.MOCK_CARD_EXP_MONTH) || now.getMonth() + 1,
+    expYear: Number(process.env.MOCK_CARD_EXP_YEAR) || now.getFullYear() + 3,
+  };
+}
+
 function generatePan(): string {
   // 4242 + 12 random digits. Same prefix Stripe's own test cards use, so it
   // is recognisably not a real number to anyone who would know.
@@ -52,9 +77,12 @@ export async function createMockCard(
   user: User,
   input: { label: string; merchant?: string; spendingLimitCents?: number; singleUse?: boolean },
 ): Promise<{ row: Record<string, unknown>; secrets: MockCardSecrets }> {
-  const pan = generatePan();
-  const cvc = String(randomInt(100, 1000));
+  const fixed = fixedCard();
+  const pan = fixed?.number ?? generatePan();
+  const cvc = fixed?.cvc ?? String(randomInt(100, 1000));
   const now = new Date();
+  const expMonth = fixed?.expMonth ?? now.getMonth() + 1;
+  const expYear = fixed?.expYear ?? now.getFullYear() + 3;
 
   const result = await pool.query(
     `insert into issued_cards
@@ -68,8 +96,8 @@ export async function createMockCard(
       input.merchant ?? null,
       pan.slice(-4),
       "Visa",
-      now.getMonth() + 1,
-      now.getFullYear() + 3,
+      expMonth,
+      expYear,
       "active",
       input.spendingLimitCents ?? null,
       input.singleUse ?? true,
