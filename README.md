@@ -105,14 +105,14 @@ session on all of them — cross-service calls just forward it server-side.
 | Branch | Subdomain | What it owns | Docs |
 |---|---|---|---|
 | `claude/vigilant-meitner-fxqi9c` | — | production base | this file |
-| `portal` | `login` | signup/login, issues the session | — |
-| `gmail-connector` | `gmail` | Gmail sync, embeddings, classification, memory | [GMAIL.md](https://github.com/kbhatnagar1506/vouch/blob/gmail-connector/docs/GMAIL.md) |
-| `bank-connection` | `bankconnection` | Plaid link, accounts, balances | [PLAID.md](https://github.com/kbhatnagar1506/vouch/blob/bank-connection/docs/PLAID.md) |
-| `card-issuing` | `cards` | Stripe Issuing, webhooks, **MCP server** | [CARDS.md](https://github.com/kbhatnagar1506/vouch/blob/card-issuing/docs/CARDS.md) |
-| `voice-verification` | `voice` | voice enrollment + speaker matching | [VOICE.md](https://github.com/kbhatnagar1506/vouch/blob/voice-verification/docs/VOICE.md) |
-| `identity-verification` | `identity` | Persona ID + selfie, the voice binding | [IDENTITY.md](https://github.com/kbhatnagar1506/vouch/blob/identity-verification/docs/IDENTITY.md) |
-| `calling-agent` | `callingagent` | outbound voice calls | [CALLING_AGENT.md](https://github.com/kbhatnagar1506/vouch/blob/calling-agent/docs/CALLING_AGENT.md) |
-| `dashboard` | `dashboard` | the real dashboard + `/demo` | [DASHBOARD.md](https://github.com/kbhatnagar1506/vouch/blob/dashboard/docs/DASHBOARD.md) |
+| `portal` | `login` | signup/login, issues the session | [README](https://github.com/kbhatnagar1506/vouch/blob/portal/README.md) |
+| `gmail-connector` | `gmail` | Gmail sync, embeddings, classification, memory | [README](https://github.com/kbhatnagar1506/vouch/blob/gmail-connector/README.md) · [GMAIL.md](https://github.com/kbhatnagar1506/vouch/blob/gmail-connector/docs/GMAIL.md) |
+| `bank-connection` | `bankconnection` | Plaid link, accounts, balances | [README](https://github.com/kbhatnagar1506/vouch/blob/bank-connection/README.md) · [PLAID.md](https://github.com/kbhatnagar1506/vouch/blob/bank-connection/docs/PLAID.md) |
+| `card-issuing` | `cards` | Stripe Issuing, webhooks, **MCP server** | [README](https://github.com/kbhatnagar1506/vouch/blob/card-issuing/README.md) · [CARDS.md](https://github.com/kbhatnagar1506/vouch/blob/card-issuing/docs/CARDS.md) |
+| `voice-verification` | `voice` | voice enrollment + speaker matching | [README](https://github.com/kbhatnagar1506/vouch/blob/voice-verification/README.md) · [VOICE.md](https://github.com/kbhatnagar1506/vouch/blob/voice-verification/docs/VOICE.md) |
+| `identity-verification` | `identity` | Persona ID + selfie, the voice binding | [README](https://github.com/kbhatnagar1506/vouch/blob/identity-verification/README.md) · [IDENTITY.md](https://github.com/kbhatnagar1506/vouch/blob/identity-verification/docs/IDENTITY.md) |
+| `calling-agent` | `callingagent` | outbound voice calls | [README](https://github.com/kbhatnagar1506/vouch/blob/calling-agent/README.md) · [CALLING_AGENT.md](https://github.com/kbhatnagar1506/vouch/blob/calling-agent/docs/CALLING_AGENT.md) |
+| `dashboard` | `dashboard` | the real dashboard + `/demo` | [README](https://github.com/kbhatnagar1506/vouch/blob/dashboard/README.md) · [DASHBOARD.md](https://github.com/kbhatnagar1506/vouch/blob/dashboard/docs/DASHBOARD.md) |
 
 ## The MCP server
 
