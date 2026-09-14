@@ -17,7 +17,7 @@ thing that ships.
 | `bank-connection/` | `bank-connection` | `bankconnection` | Plaid link, accounts, balances |
 | `card-issuing/` | `card-issuing` | `cards` | Stripe Issuing, webhooks, **the MCP server** |
 | `voice-verification/` | `voice-verification` | `voice` | voice enrollment, speaker matching |
-| `identity-verification/` | `identity-verification` | `identity` | Persona ID + selfie, the voice binding |
+| `identity-anchor/` | `identity-anchor` | `identity` | Persona ID + selfie, the voice binding |
 | `calling-agent/` | `calling-agent` | `callingagent` | outbound voice calls |
 | `dashboard/` | `dashboard` | `dashboard` | the real dashboard and `/demo` |
 
@@ -33,7 +33,7 @@ Short on time? These are the files that carry the ideas rather than the wiring.
   card number for a Stripe-issued card.
 - **`card-issuing/lib/stripe.ts`** — issuance and the single-use rule. The
   auto-cancel lives in `recordCardTransaction`, fired by the webhook.
-- **`identity-verification/lib/persona-schema.ts`** — why `approved` is the only
+- **`identity-anchor/lib/persona-schema.ts`** — why `approved` is the only
   status that counts, and the age check that keeps the boolean and discards the
   birthdate.
 - **`calling-agent/lib/calling-agent/assistant.ts`** — the whole phone

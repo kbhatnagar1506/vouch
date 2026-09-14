@@ -28,7 +28,7 @@ break another by changing a shared file.
 | `gmail-connector` | `gmail.getvouch.club` | Gmail OAuth, email sync, classification, memory |
 | `bank-connection` | `bankconnection.getvouch.club` | Plaid bank linking (skippable) |
 | `voice-verification` | `voice.getvouch.club` | Voice enrollment + speaker verification |
-| `identity-verification` | `identity.getvouch.club` | Persona ID + selfie liveness *(not yet bound)* |
+| `identity-anchor` | `identity.getvouch.club` | Persona ID + selfie liveness *(not yet bound)* |
 | `card-issuing` | `cards.getvouch.club` | Stripe Issuing virtual cards |
 | `calling-agent` | `callingagent.getvouch.club` | Outbound voice calls (Vapi) |
 | `dashboard` | `dashboard.getvouch.club` | The product surface |
@@ -73,7 +73,7 @@ Identity verification is deliberately **not** in that chain — see §6.
 | **Vapi** | call orchestration + telephony | `calling-agent` |
 | **ElevenLabs** | the agent's voice (TTS) | `calling-agent` |
 | **Google Gemini** (`gemini-2.5-flash`) | the agent's reasoning on calls | `calling-agent` |
-| **Persona** | government ID, selfie liveness, phone verification | `identity-verification` |
+| **Persona** | government ID, selfie liveness, phone verification | `identity-anchor` |
 | **GCP Cloud Run** | hosts our own ML service (below) | `voice-verification` |
 
 **Our own ML service** — `services/voice-inference`, the one part of the
@@ -162,7 +162,7 @@ conversation, and returned `{"confirmed": true}`.
 
 ## 6. Identity: why it isn't an onboarding step
 
-Before `identity-verification`, everything the spending decision rested on
+Before `identity-anchor`, everything the spending decision rested on
 was **self-attested**:
 
 - The cardholder name sent to Stripe Issuing came from a signup form field.
@@ -237,7 +237,7 @@ schema rather than forking the connection.
 | `card-issuing` | `stripe_cardholders`, `issued_cards`, `card_transactions` |
 | `voice-verification` | `voice_enrollments`, `voice_verifications` |
 | `calling-agent` | `calling_agent_calls`, `calling_agent_events` |
-| `identity-verification` | `identity_verifications`, `identity_verification_events` |
+| `identity-anchor` | `identity_verifications`, `identity_verification_events` |
 
 Sensitive values are encrypted at rest with AES-256-GCM (`lib/crypto.ts`):
 voice embeddings (biometric data) and Plaid access tokens.
@@ -273,5 +273,5 @@ Migrations are plain SQL under `db/migrations/`, applied via
 | `docs/VOICE.md` | `voice-verification` |
 | `docs/CALLING_AGENT.md` | `calling-agent` |
 | `docs/DASHBOARD.md` | `dashboard` |
-| `docs/IDENTITY.md` | `identity-verification` |
+| `docs/IDENTITY.md` | `identity-anchor` |
 | `CLAUDE.md` | this branch — the branch/subdomain convention |

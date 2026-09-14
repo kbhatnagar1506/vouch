@@ -1,4 +1,4 @@
-# identity-verification — proof of personhood, as a capability unlock
+# identity-anchor — proof of personhood, as a capability unlock
 
 `identity.getvouch.club` · [full docs](docs/IDENTITY.md)
 
