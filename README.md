@@ -112,17 +112,17 @@ orchestration, no separate projects, and every service reachable at a real URL.
 Every branch verifies the same `JWT_SECRET`, so the portal's cookie is a valid
 session on all of them — cross-service calls just forward it server-side.
 
-| Branch | Subdomain | What it owns | Docs |
+| Branch | Subdomain | What it owns | Read |
 |---|---|---|---|
 | `claude/vigilant-meitner-fxqi9c` | — | production base | this file |
-| `portal` | `login` | signup/login, issues the session | — |
-| `gmail-connector` | `gmail` | Gmail sync, embeddings, classification, memory | [GMAIL.md](services/gmail-connector/docs/GMAIL.md) |
-| `bank-connection` | `bankconnection` | Plaid link, accounts, balances | [PLAID.md](services/bank-connection/docs/PLAID.md) |
-| `card-issuing` | `cards` | Stripe Issuing, webhooks, **MCP server** | [CARDS.md](services/card-issuing/docs/CARDS.md) |
-| `voice-verification` | `voice` | voice enrollment + speaker matching | [VOICE.md](services/voice-verification/docs/VOICE.md) |
-| `identity-verification` | `identity` | Persona ID + selfie, the voice binding | [IDENTITY.md](services/identity-verification/docs/IDENTITY.md) |
-| `calling-agent` | `callingagent` | outbound voice calls | [CALLING_AGENT.md](services/calling-agent/docs/CALLING_AGENT.md) |
-| `dashboard` | `dashboard` | the real dashboard + `/demo` | [DASHBOARD.md](services/dashboard/docs/DASHBOARD.md) |
+| `portal` | `login` | signup/login, issues the session | [README](services/portal/README.md) |
+| `gmail-connector` | `gmail` | Gmail sync, embeddings, classification, memory | [README](services/gmail-connector/README.md) · [GMAIL.md](services/gmail-connector/docs/GMAIL.md) |
+| `bank-connection` | `bankconnection` | Plaid link, accounts, balances | [README](services/bank-connection/README.md) · [PLAID.md](services/bank-connection/docs/PLAID.md) |
+| `card-issuing` | `cards` | Stripe Issuing, webhooks, **MCP server** | [README](services/card-issuing/README.md) · [CARDS.md](services/card-issuing/docs/CARDS.md) |
+| `voice-verification` | `voice` | voice enrollment + speaker matching | [README](services/voice-verification/README.md) · [VOICE.md](services/voice-verification/docs/VOICE.md) |
+| `identity-verification` | `identity` | Persona ID + selfie, the voice binding | [README](services/identity-verification/README.md) · [IDENTITY.md](services/identity-verification/docs/IDENTITY.md) |
+| `calling-agent` | `callingagent` | outbound voice calls | [README](services/calling-agent/README.md) · [CALLING_AGENT.md](services/calling-agent/docs/CALLING_AGENT.md) |
+| `dashboard` | `dashboard` | the real dashboard + `/demo` | [README](services/dashboard/README.md) · [DASHBOARD.md](services/dashboard/docs/DASHBOARD.md) |
 
 ## The MCP server
 
