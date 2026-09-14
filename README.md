@@ -110,7 +110,7 @@ session on all of them — cross-service calls just forward it server-side.
 | `bank-connection` | `bankconnection` | Plaid link, accounts, balances | [README](https://github.com/kbhatnagar1506/vouch/blob/bank-connection/README.md) · [PLAID.md](https://github.com/kbhatnagar1506/vouch/blob/bank-connection/docs/PLAID.md) |
 | `card-issuing` | `cards` | Stripe Issuing, webhooks, **MCP server** | [README](https://github.com/kbhatnagar1506/vouch/blob/card-issuing/README.md) · [CARDS.md](https://github.com/kbhatnagar1506/vouch/blob/card-issuing/docs/CARDS.md) |
 | `voice-verification` | `voice` | voice enrollment + speaker matching | [README](https://github.com/kbhatnagar1506/vouch/blob/voice-verification/README.md) · [VOICE.md](https://github.com/kbhatnagar1506/vouch/blob/voice-verification/docs/VOICE.md) |
-| `identity-verification` | `identity` | Persona ID + selfie, the voice binding | [README](https://github.com/kbhatnagar1506/vouch/blob/identity-verification/README.md) · [IDENTITY.md](https://github.com/kbhatnagar1506/vouch/blob/identity-verification/docs/IDENTITY.md) |
+| `identity-anchor` | `identity` | Persona ID + selfie, the voice binding | [README](https://github.com/kbhatnagar1506/vouch/blob/identity-anchor/README.md) · [IDENTITY.md](https://github.com/kbhatnagar1506/vouch/blob/identity-anchor/docs/IDENTITY.md) |
 | `calling-agent` | `callingagent` | outbound voice calls | [README](https://github.com/kbhatnagar1506/vouch/blob/calling-agent/README.md) · [CALLING_AGENT.md](https://github.com/kbhatnagar1506/vouch/blob/calling-agent/docs/CALLING_AGENT.md) |
 | `dashboard` | `dashboard` | the real dashboard + `/demo` | [README](https://github.com/kbhatnagar1506/vouch/blob/dashboard/README.md) · [DASHBOARD.md](https://github.com/kbhatnagar1506/vouch/blob/dashboard/docs/DASHBOARD.md) |
 
@@ -167,6 +167,94 @@ Worth being precise about, because "it's a demo" usually hides this:
 
 The real dashboard never fabricates a number. Where there's no data, it says so.
 
+## Contributions
+
+Built by **Krishna Bhatnagar** ([@kbhatnagar1506](https://github.com/kbhatnagar1506))
+— schema, services, deployment topology, and the two subsystems below, which
+carry most of the technical weight.
+
+### The voice model pipeline — `voice-verification`
+
+Speaker verification is a **frozen** ECAPA-TDNN checkpoint (SpeechBrain,
+pretrained on VoxCeleb) used as an embedding extractor, plus AASIST
+(ASVspoof2019 LA) for anti-spoofing. Neither is fine-tuned — the published
+checkpoints already generalize to unseen speakers, and fine-tuning on our own
+enrolled users is a separate project gated on GPU compute.
+
+The depth is in everything around the checkpoint, where a naive integration
+silently produces garbage:
+
+- **The default threshold was wrong, and only real trials revealed it.** 0.75
+  looks like a sane cosine cutoff and rejected genuine same-speaker
+  verifications scoring 66.9% — this checkpoint's raw, unnormalized
+  similarities run lower than intuition suggests. It's now 0.5, and documented
+  as *provisional*, because it still hasn't been calibrated against negative
+  (different-speaker) trials. An uncalibrated threshold presented as calibrated
+  is how biometric systems get embarrassing.
+- **Unstable scores traced to embedding silence.** The client's peak-amplitude
+  gate let room noise and dead air reach the encoder. Replaced with Silero VAD
+  trimming server-side; a clip with no detected speech now returns 422 instead
+  of an embedding of nothing.
+- **Deterministic eval-time padding.** AASIST expects exactly 64,600 samples
+  (~4.04s). The reference implementation random-crops during training; this
+  service tile-repeats and truncates deterministically, so the same clip always
+  scores the same. Non-reproducible biometric scores are untestable.
+- **The softmax index is verified, not guessed.** Spoof probability is index 0
+  because the reference repo's `data_utils.py` labels bonafide as 1. Getting
+  this backwards inverts the detector — and it still looks like it works.
+- **Enrollment is a centroid of three clips**, not one, and the stored
+  voiceprint is AES-256-GCM encrypted at rest.
+- **Missing weights report `model_loaded: false`, never "not spoofed."** A check
+  that failed to run must not read as a check that passed.
+- Models preload at process start behind a Cloud Run startup probe, so no real
+  request pays the model-load cost.
+
+AASIST runs and is logged but is **deliberately not enforced** — gating a live
+call on an uncalibrated spoof score is worse than not gating it. The reasoning
+is in [VOICE.md](https://github.com/kbhatnagar1506/vouch/blob/voice-verification/docs/VOICE.md).
+
+### Gmail receipt classification — `gmail-connector`
+
+Classifying a receipt is the obvious job for an LLM call per email. This
+deliberately doesn't do that.
+
+Three spending categories are written as careful prose descriptions, embedded
+**once** with Vertex `text-embedding-004` (768-d), and stored as pgvector
+prototypes. Classification is then a single nearest-neighbour query —
+`1 - (prototype_embedding <=> $1::vector)`, ordered by cosine distance,
+`LIMIT 1`. What that buys:
+
+- **Deterministic and auditable.** The same email always lands in the same
+  category, and the stored `similarity` records how confidently. An LLM
+  classifier gives you neither.
+- **Flat cost.** One embedding per email, zero per classification — no tokens
+  burned reasoning about a Netflix receipt.
+- **The discrimination lives in prose, where it can be edited.** The genuinely
+  hard boundary is `active_subscription_usage` (an Uber ride receipt —
+  pay-per-use on a service you already hold) versus `subscription_signup_renewal`
+  (the Uber One charge itself). That distinction is what makes the dashboard's
+  renew/hold/ask rule meaningful, and it's tuned by rewriting a sentence rather
+  than by retraining anything.
+- `ensurePrototypeEmbeddings()` backfills only rows where `prototype_embedding
+  IS NULL`, so adding a category costs one embedding call, not a full re-embed.
+
+Long emails are chunked content-aware, each chunk embedded, then mean-pooled
+into a single message vector for classification — while the per-chunk
+embeddings are kept for retrieval. Two undocumented Backboard bugs were found
+by bisection while wiring the memory write: a 500 on any non-integer float in
+metadata, and a 4096-**byte** (not character) content cap, so one smart quote
+shifts the boundary.
+
+### Prior art
+
+`lib/embeddings.ts`, `lib/spending-categories.ts`, and the `spending_categories`
+migration were ported from
+[`aaditisinghal/vouch-aaditi`](https://github.com/aaditisinghal/vouch-aaditi)
+(commit `55eedf7`) and adapted to this repo's shared `pool` export; each file
+header records exactly what changed. The pipeline they plug into — chunking,
+mean pooling, the memory fusion, the concurrent Backboard write, and everything
+described above — is this repo's.
+
 ## Running it
 
 Each branch is a standalone Next.js app sharing one database.
@@ -182,7 +270,7 @@ npm run dev
 ```
 
 `npm test` runs the Vitest suites (`gmail-connector`, `dashboard`,
-`identity-verification`). Each branch's `.env.example` explains every variable
+`identity-anchor`). Each branch's `.env.example` explains every variable
 and where to obtain it; the per-service docs above cover setup, data model, and
 the reasoning behind the tricky parts.
 
