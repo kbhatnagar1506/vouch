@@ -1,6 +1,6 @@
 # Identity verification (Persona)
 
-This branch (`identity-verification`, deployed to `identity.getvouch.club`)
+This branch (`identity-anchor`, deployed to `identity.getvouch.club`)
 proves there is a real, identified human behind an account before Vouch's
 agent is allowed to spend money on their behalf. It uses
 [Persona](https://withpersona.com) for government ID, selfie liveness, and
